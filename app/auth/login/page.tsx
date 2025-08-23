@@ -92,23 +92,23 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-green-400 matrix-bg flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-950 text-blue-400 matrix-bg flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-6 sm:mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-green-400 text-black mb-3 sm:mb-4">
+          <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-blue-500 text-white mb-3 sm:mb-4">
             <Shield className="w-6 h-6 sm:w-8 sm:h-8" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold mb-2 dedsec-glow">DedSecCompute</h1>
-          <p className="text-sm sm:text-base text-green-300">Distributed Computing Collective</p>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2 dedsec-glow text-blue-400">DedSecCompute</h1>
+          <p className="text-sm sm:text-base text-cyan-300">Distributed Computing Collective</p>
         </div>
 
-        <Card className="dedsec-border bg-black/80">
+        <Card className="dedsec-border bg-slate-950/80">
           <CardHeader className="pb-4 sm:pb-6">
-            <CardTitle className="text-green-400 text-lg sm:text-xl">
+            <CardTitle className="text-blue-400 text-lg sm:text-xl">
               {otpSent ? "> Verify Access Code" : "> Access Network"}
             </CardTitle>
-            <CardDescription className="text-green-300 text-sm">
+            <CardDescription className="text-cyan-300 text-sm">
               {otpSent ? "Enter the verification code sent to your phone" : "Authenticate to join the collective"}
             </CardDescription>
           </CardHeader>
@@ -118,7 +118,7 @@ export default function LoginPage() {
                 {/* Phone OTP Form */}
                 <form onSubmit={handleSendOTP} className="space-y-4">
                   <div>
-                    <Label htmlFor="phone" className="text-green-400 flex items-center gap-2 text-sm sm:text-base">
+                    <Label htmlFor="phone" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
                       <Phone className="w-4 h-4" />
                       Phone Number
                     </Label>
@@ -128,7 +128,7 @@ export default function LoginPage() {
                       placeholder="+1 (555) 123-4567"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      className="bg-black border-green-400 text-green-400 placeholder-green-600 text-sm sm:text-base h-10 sm:h-11"
+                      className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11"
                       required
                     />
                   </div>
@@ -143,10 +143,10 @@ export default function LoginPage() {
 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-green-400/30"></div>
+                    <div className="w-full border-t border-blue-400/30"></div>
                   </div>
                   <div className="relative flex justify-center text-xs sm:text-sm">
-                    <span className="bg-black px-2 text-green-600">OR</span>
+                    <span className="bg-slate-950 px-2 text-blue-600">OR</span>
                   </div>
                 </div>
 
@@ -164,7 +164,7 @@ export default function LoginPage() {
               /* OTP Verification Form */
               <form onSubmit={handleVerifyOTP} className="space-y-4">
                 <div>
-                  <Label htmlFor="otp" className="text-green-400 text-sm sm:text-base">
+                  <Label htmlFor="otp" className="text-blue-400 text-sm sm:text-base">
                     Verification Code
                   </Label>
                   <Input
@@ -173,7 +173,7 @@ export default function LoginPage() {
                     placeholder="123456"
                     value={otp}
                     onChange={(e) => setOtp(e.target.value)}
-                    className="bg-black border-green-400 text-green-400 placeholder-green-600 text-center text-xl sm:text-2xl tracking-widest h-12 sm:h-14"
+                    className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-center text-xl sm:text-2xl tracking-widest h-12 sm:h-14"
                     maxLength={6}
                     required
                   />
@@ -188,7 +188,7 @@ export default function LoginPage() {
                 <Button
                   type="button"
                   onClick={() => setOtpSent(false)}
-                  className="w-full bg-transparent border border-green-400 text-green-400 hover:bg-green-400 hover:text-black h-10 sm:h-11 text-sm sm:text-base"
+                  className="w-full bg-transparent border border-blue-400 text-blue-400 hover:bg-blue-400 hover:text-slate-950 h-10 sm:h-11 text-sm sm:text-base"
                 >
                   Back to Phone Entry
                 </Button>
@@ -202,19 +202,19 @@ export default function LoginPage() {
             )}
 
             {/* Demo Mode */}
-            <div className="border-t border-green-400/30 pt-4">
+            <div className="border-t border-blue-400/30 pt-4">
               <Button
                 onClick={handleDemoMode}
-                className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold h-10 sm:h-11 text-sm sm:text-base"
+                className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold h-10 sm:h-11 text-sm sm:text-base"
               >
                 Demo Mode (Development Only)
               </Button>
-              <p className="text-xs text-green-600 text-center mt-2">Skip authentication for testing purposes</p>
+              <p className="text-xs text-blue-600 text-center mt-2">Skip authentication for testing purposes</p>
             </div>
 
-            <div className="text-center text-xs sm:text-sm text-green-600">
+            <div className="text-center text-xs sm:text-sm text-blue-600">
               New to the collective?{" "}
-              <Link href="/auth/signup" className="text-green-400 hover:text-green-300 underline">
+              <Link href="/auth/signup" className="text-blue-400 hover:text-cyan-300 underline">
                 Join now
               </Link>
             </div>
@@ -225,7 +225,7 @@ export default function LoginPage() {
         <div className="text-center mt-4 sm:mt-6">
           <Link
             href="/admin"
-            className="text-red-400 hover:text-red-300 text-xs sm:text-sm underline opacity-50 hover:opacity-100 transition-opacity"
+            className="text-orange-400 hover:text-orange-300 text-xs sm:text-sm underline opacity-50 hover:opacity-100 transition-opacity"
           >
             Admin Access
           </Link>

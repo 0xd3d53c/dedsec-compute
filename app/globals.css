@@ -128,26 +128,26 @@
 }
 
 .dedsec-border {
-  border: 1px solid #00d4ff;
-  box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+  border: 1px solid #0066ff;
+  box-shadow: 0 0 10px rgba(0, 102, 255, 0.3);
 }
 
 .dedsec-button {
   background: linear-gradient(45deg, #0a0a0a, #1a1a2e);
-  border: 1px solid #00d4ff;
-  color: #00d4ff;
+  border: 1px solid #0066ff;
+  color: #0066ff;
   transition: all 0.3s ease;
 }
 
 .dedsec-button:hover {
-  background: linear-gradient(45deg, #00d4ff, #8a2be2);
+  background: linear-gradient(45deg, #0066ff, #ff8800);
   color: #000000;
-  box-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+  box-shadow: 0 0 20px rgba(0, 102, 255, 0.5);
 }
 
 .matrix-bg {
-  background-image: linear-gradient(90deg, rgba(0, 212, 255, 0.1) 1px, transparent 1px),
-    linear-gradient(rgba(138, 43, 226, 0.1) 1px, transparent 1px);
+  background-image: linear-gradient(90deg, rgba(0, 102, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(rgba(255, 136, 0, 0.1) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 
@@ -165,8 +165,22 @@
   }
 }
 
+.pulse-blue {
+  animation: pulse-blue 2s infinite;
+}
+
+@keyframes pulse-blue {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 .cyberpunk-gradient {
-  background: linear-gradient(135deg, #00d4ff 0%, #8a2be2 50%, #ff1493 100%);
+  background: linear-gradient(135deg, #0066ff 0%, #00ffff 50%, #ff8800 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -174,9 +188,42 @@
 
 .neon-border {
   border: 2px solid transparent;
-  background: linear-gradient(45deg, #00d4ff, #8a2be2) border-box;
+  background: linear-gradient(45deg, #0066ff, #ff8800) border-box;
   -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: destination-out;
   mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
+}
+
+/* Added new electric theme utility classes */
+.electric-blue {
+  color: #0066ff;
+}
+
+.electric-cyan {
+  color: #00ffff;
+}
+
+.electric-orange {
+  color: #ff8800;
+}
+
+.electric-slate {
+  color: #64748b;
+}
+
+.bg-electric-dark {
+  background-color: #0f172a;
+}
+
+.border-electric-blue {
+  border-color: #0066ff;
+}
+
+.border-electric-cyan {
+  border-color: #00ffff;
+}
+
+.border-electric-orange {
+  border-color: #ff8800;
 }
