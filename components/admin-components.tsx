@@ -57,9 +57,12 @@ export function CreateOperationDialog({ onOperationCreated, adminId }: CreateOpe
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       )
 
-      // Generate task signature and hash
-      const taskSignature = `sig_${Math.random().toString(36).substring(2, 15)}_${Date.now()}`
-      const taskHash = `hash_${formData.name.toLowerCase().replace(/\s+/g, "_")}_v1_2024`
+      const timestamp = Date.now()
+      const randomBytes = crypto.getRandomValues(new Uint8Array(16))
+      const randomHex = Array.from(randomBytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
+
+      const taskSignature = `sig_${randomHex}_${timestamp}`
+      const taskHash = await generateSecureHash(`${formData.name}_${timestamp}_${randomHex}`)
 
       const { error } = await supabase.from("operations").insert({
         name: formData.name,
@@ -96,6 +99,14 @@ export function CreateOperationDialog({ onOperationCreated, adminId }: CreateOpe
     }
 
     setIsLoading(false)
+  }
+
+  const generateSecureHash = async (data: string): Promise<string> => {
+    const encoder = new TextEncoder()
+    const dataBuffer = encoder.encode(data)
+    const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    return `hash_${hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")}`
   }
 
   return (
@@ -220,8 +231,8 @@ export function AdminPasswordChange({ adminId }: { adminId: string }) {
       return
     }
 
-    if (passwords.current !== "admin") {
-      setError("Current password is incorrect")
+    if (passwords.new.length < 8) {
+      setError("Password must be at least 8 characters long")
       setIsLoading(false)
       return
     }
@@ -232,17 +243,26 @@ export function AdminPasswordChange({ adminId }: { adminId: string }) {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       )
 
-      // In production, this would hash the password properly
-      // For now, we'll just log the password change
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: passwords.new,
+      })
+
+      if (updateError) {
+        setError("Failed to update password: " + updateError.message)
+        setIsLoading(false)
+        return
+      }
+
+      // Log admin action
       await supabase.from("admin_logs").insert({
         admin_id: adminId,
         action: "password_changed",
-        details: { note: "Admin password updated" },
+        details: { note: "Admin password updated securely" },
       })
 
       setIsOpen(false)
       setPasswords({ current: "", new: "", confirm: "" })
-      alert('Password changed successfully! (Demo mode - password remains "admin")')
+      alert("Password changed successfully!")
     } catch (err) {
       setError("Failed to change password")
     }
@@ -291,6 +311,7 @@ export function AdminPasswordChange({ adminId }: { adminId: string }) {
               value={passwords.new}
               onChange={(e) => setPasswords({ ...passwords, new: e.target.value })}
               className="bg-slate-950 border-cyan-400 text-cyan-400"
+              minLength={8}
               required
             />
           </div>

@@ -35,6 +35,7 @@ export class ComputeEngine {
   private onComplete?: (result: TaskResult) => void
   private onError?: (error: Error) => void
   private abortController: AbortController | null = null
+  private allowedSignatures: Set<string> = new Set()
 
   constructor(
     onProgress?: (progress: ComputeProgress) => void,
@@ -44,6 +45,22 @@ export class ComputeEngine {
     this.onProgress = onProgress
     this.onComplete = onComplete
     this.onError = onError
+    this.initializeAllowedSignatures()
+  }
+
+  private async initializeAllowedSignatures() {
+    try {
+      // In production, fetch from secure database or API
+      const response = await fetch("/api/compute/signatures")
+      if (response.ok) {
+        const signatures = await response.json()
+        this.allowedSignatures = new Set(signatures)
+      }
+    } catch (error) {
+      console.error("Failed to load allowed signatures:", error)
+      // Fallback to empty set for security
+      this.allowedSignatures = new Set()
+    }
   }
 
   async executeTask(task: ComputeTask): Promise<TaskResult> {
@@ -151,20 +168,26 @@ export class ComputeEngine {
   }
 
   private verifyTaskSignature(task: ComputeTask): boolean {
-    const allowedSignatures = [
-      "sig_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6",
-      "sig_z6y5x4w3v2u1t0s9r8q7p6o5n4m3l2k1j0i9h8g7f6e5d4c3b2a1",
-      "sig_f1e2d3c4b5a6z7y8x9w0v1u2t3s4r5q6p7o8n9m0l1k2j3i4h5g6",
-    ]
-
-    // Verify both hash and signature
-    return allowedSignatures.includes(task.signature) && this.verifyTaskHash(task)
+    return this.allowedSignatures.has(task.signature) && this.verifyTaskHash(task)
   }
 
-  private verifyTaskHash(task: ComputeTask): boolean {
-    // In production, this would verify cryptographic signatures
-    const allowedHashes = ["hash_prime_sweep_v1_2024", "hash_crypto_analysis_v1_2024", "hash_data_matrix_v1_2024"]
-    return allowedHashes.includes(task.hash)
+  private async verifyTaskHash(task: ComputeTask): Promise<boolean> {
+    try {
+      const expectedHash = await this.generateTaskHash(task.operation_id, task.parameters)
+      return task.hash === expectedHash
+    } catch (error) {
+      console.error("Hash verification failed:", error)
+      return false
+    }
+  }
+
+  private async generateTaskHash(operationId: string, parameters: any): Promise<string> {
+    const data = `${operationId}_${JSON.stringify(parameters)}_${Date.now()}`
+    const encoder = new TextEncoder()
+    const dataBuffer = encoder.encode(data)
+    const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    return `hash_${hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")}`
   }
 
   private async searchPrimes(

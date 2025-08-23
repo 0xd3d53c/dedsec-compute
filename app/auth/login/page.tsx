@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
@@ -20,21 +21,53 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
+  const validatePhoneNumber = (phoneNumber: string): { isValid: boolean; formatted?: string; error?: string } => {
+    try {
+      if (!phoneNumber.trim()) {
+        return { isValid: false, error: "Phone number is required" }
+      }
+
+      const parsed = parsePhoneNumber(phoneNumber)
+      if (!parsed) {
+        return { isValid: false, error: "Invalid phone number format" }
+      }
+
+      if (!isValidPhoneNumber(phoneNumber)) {
+        return { isValid: false, error: "Invalid phone number" }
+      }
+
+      return {
+        isValid: true,
+        formatted: parsed.formatInternational(),
+      }
+    } catch (error) {
+      return { isValid: false, error: "Invalid phone number format" }
+    }
+  }
+
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    const phoneValidation = validatePhoneNumber(phone)
+    if (!phoneValidation.isValid) {
+      setError(phoneValidation.error || "Invalid phone number")
+      return
+    }
+
     const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
     try {
       const { error } = await supabase.auth.signInWithOtp({
-        phone: phone,
+        phone: phoneValidation.formatted!,
         options: {
           shouldCreateUser: true,
         },
       })
 
       if (error) throw error
+      setPhone(phoneValidation.formatted!) // Update with formatted number
       setOtpSent(true)
     } catch (error: any) {
       setError(error.message)
@@ -84,11 +117,6 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const handleDemoMode = () => {
-    console.log("[v0] Demo mode activated, redirecting to dashboard")
-    router.replace("/dashboard?demo=true")
   }
 
   return (
@@ -200,17 +228,6 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
-
-            {/* Demo Mode */}
-            <div className="border-t border-blue-400/30 pt-4">
-              <Button
-                onClick={handleDemoMode}
-                className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold h-10 sm:h-11 text-sm sm:text-base"
-              >
-                Demo Mode (Development Only)
-              </Button>
-              <p className="text-xs text-blue-600 text-center mt-2">Skip authentication for testing purposes</p>
-            </div>
 
             <div className="text-center text-xs sm:text-sm text-blue-600">
               New to the collective?{" "}

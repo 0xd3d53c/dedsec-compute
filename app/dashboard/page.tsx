@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,8 +27,6 @@ import {
 
 export default function Dashboard() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const isDemoMode = searchParams.get("demo") === "true"
 
   const [user, setUser] = useState<any>(null)
   const [follower, setFollower] = useState<any>(null)
@@ -48,73 +46,21 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
-    if (!isDemoMode) {
-      const checkAuth = async () => {
-        const supabase = createClient()
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
+    const checkAuth = async () => {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-        if (!user) {
-          router.push("/auth/login")
-          return
-        }
-
-        setUser(user)
-        loadUserData(user.id)
+      if (!user) {
+        router.push("/auth/login")
+        return
       }
-      checkAuth()
-    } else {
-      console.log("[v0] Demo mode activated, setting demo data")
-      setUser({ id: "demo-user", email: "demo@dedsec.com" })
-      setFollower({
-        id: "demo-follower",
-        device_info: {
-          cpu_cores: 8,
-          total_memory_gb: 16,
-          architecture: "x86_64",
-          gpu_model: "Demo GPU",
-        },
-        max_cpu_percent: 25,
-        max_memory_mb: 512,
-        only_when_charging: true,
-        only_when_idle: true,
-        is_contributing: false,
-        total_compute_hours: 12.5,
-        user_id: "demo-user-id",
-      })
-      setNetworkStats({
-        total_followers: 847,
-        active_followers: 73,
-        total_cpu_cores: 3420,
-        total_memory_gb: 6840,
-        current_compute_power: 1250,
-        operations_per_second: 342,
-      })
-      setOperations([
-        {
-          id: "1",
-          name: "OPERATION_PRIME_SWEEP",
-          description: "Search for large prime numbers across distributed network",
-          required_compute_power: 100,
-          is_active: true,
-        },
-        {
-          id: "2",
-          name: "OPERATION_CRYPTO_MINE",
-          description: "Distributed cryptocurrency mining operation",
-          required_compute_power: 500,
-          is_active: false,
-        },
-        {
-          id: "3",
-          name: "OPERATION_DATA_CRUNCH",
-          description: "Large-scale data processing and analysis",
-          required_compute_power: 1000,
-          is_active: false,
-        },
-      ])
+
+      setUser(user)
+      loadUserData(user.id)
     }
+    checkAuth()
 
     loadNetworkData()
     const interval = setInterval(() => {
@@ -123,7 +69,7 @@ export default function Dashboard() {
     }, 2000)
 
     return () => clearInterval(interval)
-  }, [isDemoMode, router])
+  }, [router])
 
   const loadUserData = async (userId: string) => {
     const supabase = createClient()
@@ -141,49 +87,13 @@ export default function Dashboard() {
   }
 
   const loadNetworkData = async () => {
-    if (isDemoMode) {
-      setNetworkStats({
-        total_followers: 847,
-        active_followers: 73,
-        total_cpu_cores: 3420,
-        total_memory_gb: 6840,
-        current_compute_power: 1250,
-        operations_per_second: 342,
-      })
+    const supabase = createClient()
 
-      setOperations([
-        {
-          id: "1",
-          name: "OPERATION_PRIME_SWEEP",
-          description: "Search for large prime numbers across distributed network",
-          required_compute_power: 100,
-          is_active: true,
-        },
-        {
-          id: "2",
-          name: "OPERATION_CRYPTO_MINE",
-          description: "Distributed cryptocurrency mining operation",
-          required_compute_power: 500,
-          is_active: false,
-        },
-        {
-          id: "3",
-          name: "OPERATION_DATA_CRUNCH",
-          description: "Large-scale data processing and analysis",
-          required_compute_power: 1000,
-          is_active: false,
-        },
-      ])
-    } else {
-      const supabase = createClient()
+    const { data: stats } = await supabase.from("network_stats").select("*").single()
+    const { data: ops } = await supabase.from("operations").select("*").eq("is_active", true)
 
-      const { data: stats } = await supabase.from("network_stats").select("*").single()
-
-      const { data: ops } = await supabase.from("operations").select("*").eq("is_active", true)
-
-      setNetworkStats(stats)
-      setOperations(ops || [])
-    }
+    setNetworkStats(stats)
+    setOperations(ops || [])
   }
 
   const updateRealTimeStats = () => {
@@ -200,14 +110,14 @@ export default function Dashboard() {
     const newState = !isContributing
     setIsContributing(newState)
 
-    if (!isDemoMode && follower) {
+    if (follower) {
       const supabase = createClient()
       await supabase.from("followers").update({ is_contributing: newState }).eq("id", follower.id)
     }
   }
 
   const updateSettings = async () => {
-    if (!isDemoMode && follower) {
+    if (follower) {
       const supabase = createClient()
       await supabase
         .from("followers")
@@ -222,23 +132,25 @@ export default function Dashboard() {
   }
 
   const handleLogout = async () => {
-    if (!isDemoMode) {
-      const supabase = createClient()
-      await supabase.auth.signOut()
-    }
+    const supabase = createClient()
+    await supabase.auth.signOut()
     router.push("/")
   }
 
   const generateInviteCode = () => {
-    return follower?.user_id ? `d3d_${follower.user_id.slice(0, 8).toUpperCase()}` : "d3d_DEMO1234"
+    return follower?.user_id ? `d3d_${follower.user_id.slice(0, 8).toUpperCase()}` : "d3d_LOADING"
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-black text-green-400 matrix-bg flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 text-blue-400 matrix-bg flex items-center justify-center">
         <div className="text-center">
-          <Shield className="w-16 h-16 mx-auto mb-4 animate-spin" />
-          <p>Connecting to network...</p>
+          <Shield className="w-16 h-16 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold mb-4 dedsec-glow text-blue-400">DedSecCompute</h1>
+          <p className="text-cyan-300 mb-6">Access required to join the collective</p>
+          <Button onClick={() => router.push("/auth/login")} className="dedsec-button">
+            Login to Network
+          </Button>
         </div>
       </div>
     )
@@ -259,10 +171,9 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
-            {isDemoMode && <Badge className="bg-orange-600 text-black text-xs sm:text-sm">Demo Mode</Badge>}
             <Button onClick={handleLogout} className="dedsec-button text-xs sm:text-sm px-3 sm:px-4">
               <LogOut className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-              {isDemoMode ? "Exit Demo" : "Logout"}
+              Logout
             </Button>
           </div>
         </header>
