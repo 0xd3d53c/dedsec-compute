@@ -199,7 +199,7 @@ export default function HomePage() {
           </div>
 
           <div className="text-xs text-slate-500 border-t border-blue-400/20 pt-4">
-            <p>© 2024 DedSec Collective | Distributed under the People's License</p>
+            <p>© {new Date().getFullYear()} DedSec Collective | Distributed under the People's License</p>
             <p className="font-mono mt-1">"Hack the planet. Share the power."</p>
           </div>
         </footer>
