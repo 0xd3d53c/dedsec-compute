@@ -67,7 +67,6 @@ export default function HomePage() {
                 <li>• Cryptographically signed and verified tasks only</li>
                 <li>• No arbitrary code execution on your device</li>
                 <li>• Anonymous device capabilities sharing</li>
-                <li>• Explicit consent required for all operations</li>
                 <li>• Auto-pause on low battery or overheating</li>
               </ul>
             </div>
@@ -79,7 +78,6 @@ export default function HomePage() {
                 <h3 className="text-lg sm:text-xl font-bold text-orange-400">Collective Power</h3>
               </div>
               <ul className="space-y-1 sm:space-y-2 text-cyan-300 text-xs sm:text-sm">
-                <li>• Real-time hardware detection and monitoring</li>
                 <li>• Intelligent resource allocation and load balancing</li>
                 <li>• Background processing with safety controls</li>
                 <li>• Operations unlock based on network compute thresholds</li>
@@ -95,7 +93,6 @@ export default function HomePage() {
               </div>
               <ul className="space-y-1 sm:space-y-2 text-cyan-300 text-xs sm:text-sm">
                 <li>• ARM64, ARM, x86, and x86_64 architecture support</li>
-                <li>• Real-time CPU core and RAM detection</li>
                 <li>• Android device optimization and monitoring</li>
                 <li>• Configurable resource contribution limits</li>
                 <li>• Temperature and battery level monitoring</li>
@@ -109,8 +106,7 @@ export default function HomePage() {
                 <h3 className="text-lg sm:text-xl font-bold text-blue-400">Social Network</h3>
               </div>
               <ul className="space-y-1 sm:space-y-2 text-cyan-300 text-xs sm:text-sm">
-                <li>• Unique invite codes starting with "d3d_"</li>
-                <li>• QR code generation for easy sharing</li>
+                <li>• QR invite codes for easy sharing</li>
                 <li>• Follower system and leaderboards</li>
                 <li>• Achievement system and contribution tracking</li>
                 <li>• Real-time network activity monitoring</li>
