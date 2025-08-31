@@ -150,16 +150,20 @@ export class ResourceManager {
 
   private async saveContributionSession(session: ContributionSession) {
     try {
-      const { error } = await this.supabase.from("contribution_sessions").insert({
+      const { error } = await this.supabase.from("task_executions").insert({
         id: session.id,
         user_id: session.user_id,
         device_id: session.device_id,
         started_at: session.started_at,
-        ended_at: session.ended_at,
-        total_operations: session.total_operations,
-        avg_cpu_usage: session.avg_cpu_usage,
-        avg_memory_usage: session.avg_memory_usage,
-        contribution_score: session.contribution_score,
+        completed_at: session.ended_at,
+        compute_time_ms: session.total_operations * 100, // Estimate compute time
+        result_data: {
+          total_operations: session.total_operations,
+          avg_cpu_usage: session.avg_cpu_usage,
+          avg_memory_usage: session.avg_memory_usage,
+          contribution_score: session.contribution_score,
+        },
+        status: 'completed',
       })
 
       if (error) {

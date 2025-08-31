@@ -1,12 +1,15 @@
--- Insert initial network stats
-INSERT INTO public.network_stats (total_users, active_nodes, total_computing_power, operations_per_second)
-VALUES (0, 0, 0, 0)
+-- Insert initial network metrics
+INSERT INTO public.network_metrics (active_users, total_cpu_cores, total_memory_gb, operations_per_second, network_efficiency, average_latency_ms)
+VALUES (0, 0, 0.0, 0.0, 0.0, 0)
 ON CONFLICT DO NOTHING;
 
--- Insert sample computing missions
-INSERT INTO public.computing_missions (title, description, mission_type, target_operations, reward_points)
+-- Insert sample operations (these are already in the main schema, but adding more for testing)
+INSERT INTO public.operations (name, description, required_compute_power, task_signature, task_hash, unlock_threshold, parameters)
 VALUES 
-  ('Prime Number Discovery', 'Help discover large prime numbers for cryptographic research', 'prime_calculation', 1000000, 100),
-  ('Matrix Multiplication', 'Perform complex matrix operations for scientific computing', 'matrix_operations', 500000, 75),
-  ('Hash Computation', 'Calculate cryptographic hashes for blockchain verification', 'hashing', 2000000, 150)
+  ('OPERATION_FIBONACCI', 'Calculate Fibonacci sequences for mathematical research', 200, 
+   'sig_fibonacci_v1_2024', 'hash_fibonacci_v1_2024', 100,
+   '{"algorithm": "fibonacci", "sequence_length": 1000000, "precision": "bigint"}'),
+  ('OPERATION_FACTORIAL', 'Compute large factorials for mathematical analysis', 300,
+   'sig_factorial_v1_2024', 'hash_factorial_v1_2024', 150,
+   '{"algorithm": "factorial", "max_number": 10000, "precision": "bigint"}')
 ON CONFLICT DO NOTHING;

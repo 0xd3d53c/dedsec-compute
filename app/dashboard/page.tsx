@@ -89,7 +89,7 @@ export default function Dashboard() {
   const loadNetworkData = async () => {
     const supabase = createClient()
 
-    const { data: stats } = await supabase.from("network_stats").select("*").single()
+    const { data: stats } = await supabase.from("network_metrics").select("*").order("created_at", { ascending: false }).limit(1).single()
     const { data: ops } = await supabase.from("operations").select("*").eq("is_active", true)
 
     setNetworkStats(stats)

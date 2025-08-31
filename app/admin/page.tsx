@@ -1,186 +1,234 @@
 "use client"
 
-import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Shield, Lock } from "lucide-react"
-import { createBrowserClient } from "@supabase/ssr"
+import { Shield, Lock, AlertTriangle, Loader2 } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { useAdminAuth } from "@/hooks/useAdminAuth"
 
 export default function AdminLoginPage() {
-  const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const { adminSession, isLoading: authLoading } = useAdminAuth()
+
+  // Redirect if already authenticated as admin
+  useEffect(() => {
+    if (adminSession && !authLoading) {
+      router.push("/admin/dashboard")
+    }
+  }, [adminSession, authLoading, router])
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!email.trim() || !password.trim()) {
+      setError("Email and password are required")
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
     try {
-      if (username === "admin" && password === "admin") {
-        console.log("[v0] Admin login successful with default credentials")
+      const supabase = createClient()
 
-        // Store admin session
-        localStorage.setItem(
-          "admin_session",
-          JSON.stringify({
-            id: "admin",
-            username: "admin",
-            loginTime: new Date().toISOString(),
-          }),
-        )
+      // Authenticate with Supabase
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: password,
+      })
 
-        // Try to log to database if available, but don't fail if it's not
-        try {
-          const supabase = createBrowserClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-          )
+      if (authError) throw authError
 
-          await supabase.from("admin_logs").insert({
-            admin_id: "admin",
-            action: "admin_login",
-            details: { username, login_method: "password" },
-            ip_address: "127.0.0.1",
-          })
-        } catch (dbError) {
-          console.log("[v0] Database logging failed, but continuing with login")
-        }
-
-        router.push("/admin/dashboard")
-        return
+      if (!data.user) {
+        throw new Error("Authentication failed")
       }
 
-      // If not default credentials, try database lookup
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      )
-
-      const { data: adminUser, error: userError } = await supabase
+      // Verify admin privileges
+      const { data: adminData, error: adminError } = await supabase
         .from("users")
-        .select("id, username, is_admin")
-        .eq("username", username)
+        .select("id, username, is_admin, admin_level")
+        .eq("id", data.user.id)
         .eq("is_admin", true)
         .single()
 
-      if (userError || !adminUser) {
-        setError("Invalid admin credentials")
-        setIsLoading(false)
-        return
+      if (adminError || !adminData) {
+        // Sign out the user since they're not an admin
+        await supabase.auth.signOut()
+        throw new Error("Access denied. Admin privileges required.")
       }
 
-      // For demo purposes, check against default password
-      if (password === "admin") {
+      // Log successful admin login
+      await supabase.from("admin_logs").insert({
+        admin_id: adminData.id,
+        action: "admin_login_success",
+        target_type: "system",
+        target_id: adminData.id,
+        details: {
+          username: adminData.username,
+          admin_level: adminData.admin_level,
+          login_method: "email_password",
+          ip_address: "127.0.0.1", // Will be updated with real IP
+          user_agent: navigator.userAgent
+        },
+        timestamp: new Date().toISOString()
+      })
+
+      // Redirect to admin dashboard
+      router.push("/admin/dashboard")
+
+    } catch (error: any) {
+      console.error("Admin login error:", error)
+      setError(error.message || "Authentication failed")
+      
+      // Log failed login attempt
+      try {
+        const supabase = createClient()
         await supabase.from("admin_logs").insert({
-          admin_id: adminUser.id,
-          action: "admin_login",
-          details: { username, login_method: "password" },
-          ip_address: "127.0.0.1",
+          admin_id: null,
+          action: "admin_login_failed",
+          target_type: "system",
+          target_id: null,
+          details: {
+            attempted_email: email.trim().toLowerCase(),
+            error: error.message,
+            ip_address: "127.0.0.1",
+            user_agent: navigator.userAgent
+          },
+          timestamp: new Date().toISOString()
         })
-
-        localStorage.setItem(
-          "admin_session",
-          JSON.stringify({
-            id: adminUser.id,
-            username: adminUser.username,
-            loginTime: new Date().toISOString(),
-          }),
-        )
-
-        router.push("/admin/dashboard")
-      } else {
-        setError("Invalid admin credentials")
+      } catch (logError) {
+        console.error("Failed to log failed login:", logError)
       }
-    } catch (err) {
-      console.error("[v0] Admin login error:", err)
-      setError("Authentication failed")
+    } finally {
+      setIsLoading(false)
     }
+  }
 
-    setIsLoading(false)
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-cyan-400 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+          <p>Verifying admin privileges...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-cyan-400 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-cyan-400 text-slate-950 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-cyan-500 text-slate-950 mb-4">
             <Shield className="w-8 h-8" />
           </div>
-          <h1 className="text-3xl font-bold mb-2 text-cyan-400" style={{ textShadow: "0 0 10px currentColor" }}>
+          <h1 className="text-3xl font-bold mb-2" style={{ textShadow: "0 0 20px currentColor" }}>
             Admin Access
           </h1>
-          <p className="text-cyan-300">Restricted Area - Authorized Personnel Only</p>
+          <p className="text-cyan-300">Restricted area - Admin authentication required</p>
         </div>
 
-        <Card
-          className="border border-cyan-400 bg-slate-950/80"
-          style={{ boxShadow: "0 0 10px rgba(34, 211, 238, 0.3)" }}
-        >
-          <CardHeader>
-            <CardTitle className="text-cyan-400 text-xl flex items-center gap-2">
-              <Lock className="w-5 h-5" />
-              {">"} Administrator Login
+        <Card className="border-cyan-400 bg-slate-950/80">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-cyan-400 text-xl">
+              &gt; Admin Authentication
             </CardTitle>
-            <CardDescription className="text-cyan-300">
-              Enter admin credentials to access system controls
+            <CardDescription className="text-cyan-300 text-sm">
+              Enter your admin credentials to access the control panel
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <form onSubmit={handleAdminLogin} className="space-y-4">
               <div>
-                <Label htmlFor="username" className="text-cyan-400">
-                  Username
+                <Label htmlFor="email" className="text-cyan-400 text-sm">
+                  Admin Email
                 </Label>
                 <Input
-                  id="username"
-                  type="text"
-                  placeholder="admin"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  id="email"
+                  type="email"
+                  placeholder="admin@dedsec.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="bg-slate-950 border-cyan-400 text-cyan-400 placeholder-cyan-600"
                   required
+                  autoComplete="email"
                 />
               </div>
+
               <div>
-                <Label htmlFor="password" className="text-cyan-400">
-                  Password
+                <Label htmlFor="password" className="text-cyan-400 text-sm">
+                  Admin Password
                 </Label>
                 <Input
                   id="password"
                   type="password"
-                  placeholder="admin"
+                  placeholder="Enter admin password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="bg-slate-950 border-cyan-400 text-cyan-400 placeholder-cyan-600"
                   required
+                  autoComplete="current-password"
                 />
               </div>
+
               <Button
                 type="submit"
-                className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold"
+                className="w-full bg-cyan-600 hover:bg-cyan-500 text-white"
                 disabled={isLoading}
               >
-                {isLoading ? "Authenticating..." : "Access Admin Panel"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Authenticating...
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4 mr-2" />
+                    Access Admin Panel
+                  </>
+                )}
               </Button>
             </form>
 
             {error && (
-              <div className="mt-4 text-red-400 text-sm text-center p-2 border border-red-400 rounded">{error}</div>
+              <div className="text-red-400 text-sm text-center p-3 border border-red-400 rounded flex items-center gap-2 justify-center">
+                <AlertTriangle className="w-4 h-4" />
+                {error}
+              </div>
             )}
 
-            <div className="mt-6 text-center text-xs text-cyan-600">
-              <p>Default credentials: admin/admin</p>
-              <p>Change credentials from admin dashboard</p>
+            <div className="text-center text-xs text-cyan-600">
+              <p className="mb-2">⚠️ This area is restricted to authorized administrators only</p>
+              <p>All access attempts are logged and monitored</p>
             </div>
           </CardContent>
         </Card>
+
+        {/* Security Notice */}
+        <div className="mt-6 text-center">
+          <div className="bg-slate-900/50 border border-cyan-400/20 rounded-lg p-4">
+            <h4 className="text-cyan-400 font-semibold text-sm mb-2 flex items-center gap-2 justify-center">
+              <Shield className="w-4 h-4" />
+              Security Features
+            </h4>
+            <ul className="text-xs text-cyan-300 space-y-1">
+              <li>• Multi-factor authentication support</li>
+              <li>• Session-based access control</li>
+              <li>• Comprehensive audit logging</li>
+              <li>• IP-based access monitoring</li>
+              <li>• Rate limiting and brute force protection</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   )

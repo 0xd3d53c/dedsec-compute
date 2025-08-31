@@ -1,4 +1,16 @@
--- Function to generate unique invite codes
+-- Fix user creation triggers and ensure proper database setup
+-- This script resolves the "Database error saving new user" issue
+
+-- First, drop any existing conflicting triggers
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP TRIGGER IF EXISTS set_invite_code_trigger ON public.users;
+
+-- Drop conflicting functions
+DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
+DROP FUNCTION IF EXISTS public.generate_invite_code() CASCADE;
+DROP FUNCTION IF EXISTS public.set_user_invite_code() CASCADE;
+
+-- Create the proper invite code generation function
 CREATE OR REPLACE FUNCTION public.generate_invite_code()
 RETURNS TEXT AS $$
 DECLARE
@@ -20,9 +32,9 @@ BEGIN
   
   RETURN code;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function to handle new user creation
+-- Create the proper user creation handler function
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -88,47 +100,48 @@ BEGIN
 END;
 $$;
 
--- Create trigger for new user creation
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+-- Create the main trigger for new user creation
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
 
--- Function to update network metrics
-CREATE OR REPLACE FUNCTION public.update_network_metrics()
-RETURNS VOID
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  metrics_record RECORD;
+-- Create function to update user updated_at timestamp
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS $$
 BEGIN
-  -- Calculate current network statistics
-  SELECT 
-    COUNT(DISTINCT us.user_id) as active_users,
-    COALESCE(SUM((us.hardware_specs->>'cpu_cores')::INTEGER), 0) as total_cpu_cores,
-    COALESCE(SUM((us.hardware_specs->>'total_memory_gb')::DECIMAL), 0) as total_memory_gb,
-    COALESCE(SUM(CASE WHEN us.is_contributing THEN us.max_cpu_percent END), 0) as current_compute_power
-  INTO metrics_record
-  FROM public.user_sessions us
-  WHERE us.last_active > NOW() - INTERVAL '5 minutes';
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-  -- Insert new metrics record
-  INSERT INTO public.network_metrics (
-    active_users, 
-    total_cpu_cores, 
-    total_memory_gb, 
-    operations_per_second, 
-    network_efficiency, 
-    average_latency_ms
-  ) VALUES (
-    metrics_record.active_users,
-    metrics_record.total_cpu_cores,
-    metrics_record.total_memory_gb,
-    COALESCE(metrics_record.current_compute_power * 0.1, 0), -- Simulated ops/sec
-    95.0, -- Default efficiency
-    150 -- Default latency in ms
-  );
+-- Create trigger for updating updated_at
+DROP TRIGGER IF EXISTS update_users_updated_at ON public.users;
+CREATE TRIGGER update_users_updated_at
+  BEFORE UPDATE ON public.users
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- Verify the trigger is working
+DO $$
+BEGIN
+  -- Check if trigger exists
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger 
+    WHERE tgname = 'on_auth_user_created' 
+    AND tgrelid = 'auth.users'::regclass
+  ) THEN
+    RAISE EXCEPTION 'Trigger on_auth_user_created not found on auth.users';
+  END IF;
+  
+  -- Check if function exists
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc 
+    WHERE proname = 'handle_new_user' 
+    AND pronamespace = 'public'::regnamespace
+  ) THEN
+    RAISE EXCEPTION 'Function handle_new_user not found in public schema';
+  END IF;
+  
+  RAISE NOTICE 'User creation trigger setup verified successfully';
 END;
 $$;

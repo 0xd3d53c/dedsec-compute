@@ -22,8 +22,8 @@ INSERT INTO public.operations (
   '{"sequence_length": 1000, "verification_required": true}'
 ) ON CONFLICT DO NOTHING;
 
--- Function to initialize network stats
-CREATE OR REPLACE FUNCTION public.initialize_network_stats()
+-- Function to initialize network metrics
+CREATE OR REPLACE FUNCTION public.initialize_network_metrics()
 RETURNS VOID AS $$
 BEGIN
   -- Only insert if no metrics exist
@@ -36,5 +36,5 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Initialize network stats
-SELECT public.initialize_network_stats();
+-- Initialize network metrics
+SELECT public.initialize_network_metrics();

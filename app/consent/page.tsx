@@ -44,8 +44,8 @@ export default function ConsentPage() {
 
       if (followerError) throw followerError
 
-      // Update network stats
-      await supabase.rpc("update_network_stats")
+      // Update network metrics
+      await supabase.rpc("update_network_metrics")
 
       router.push("/dashboard")
     } catch (error: any) {

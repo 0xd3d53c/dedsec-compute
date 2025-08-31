@@ -2,7 +2,7 @@
 export interface ComputeTask {
   id: string
   operation_id: string
-  type: "prime_search" | "hash_computation" | "matrix_operations" | "crypto_analysis"
+  type: "prime_search" | "hash_computation" | "matrix_operations" | "crypto_analysis" | "factorial_computation" | "fibonacci_sequence" | "pi_calculation" | "sha256_mining"
   parameters: any
   hash: string
   signature: string
@@ -14,440 +14,345 @@ export interface ComputeTask {
 export interface TaskResult {
   task_id: string
   result_data: any
-  compute_time_ms: number
-  operations_completed: number
+  computation_time: number
   verification_hash: string
-  device_signature: string
-}
-
-export interface ComputeProgress {
-  task_id: string
-  progress_percent: number
-  operations_completed: number
-  estimated_remaining_ms: number
-  current_operation: string
+  proof_of_work: string
 }
 
 export class ComputeEngine {
   private isRunning = false
   private currentTask: ComputeTask | null = null
-  private onProgress?: (progress: ComputeProgress) => void
-  private onComplete?: (result: TaskResult) => void
-  private onError?: (error: Error) => void
-  private abortController: AbortController | null = null
-  private allowedSignatures: Set<string> = new Set()
+  private progressCallback?: (progress: number, operations: number) => void
 
-  constructor(
-    onProgress?: (progress: ComputeProgress) => void,
-    onComplete?: (result: TaskResult) => void,
-    onError?: (error: Error) => void,
-  ) {
-    this.onProgress = onProgress
-    this.onComplete = onComplete
-    this.onError = onError
-    this.initializeAllowedSignatures()
-  }
-
-  private async initializeAllowedSignatures() {
-    try {
-      // In production, fetch from secure database or API
-      const response = await fetch("/api/compute/signatures")
-      if (response.ok) {
-        const signatures = await response.json()
-        this.allowedSignatures = new Set(signatures)
-      }
-    } catch (error) {
-      console.error("Failed to load allowed signatures:", error)
-      // Fallback to empty set for security
-      this.allowedSignatures = new Set()
-    }
-  }
-
-  async executeTask(task: ComputeTask): Promise<TaskResult> {
-    if (!this.verifyTaskSignature(task)) {
-      throw new Error("Invalid task signature - task not authorized")
-    }
-
-    this.isRunning = true
+  public async executeTask(task: ComputeTask, onProgress?: (progress: number, operations: number) => void): Promise<TaskResult> {
     this.currentTask = task
-    this.abortController = new AbortController()
+    this.isRunning = true
+    this.progressCallback = onProgress
 
-    const startTime = performance.now()
-    let operationsCompleted = 0
+    const startTime = Date.now()
+    let result: any
+    let operations = 0
 
     try {
-      let resultData: any
-
       switch (task.type) {
         case "prime_search":
-          resultData = await this.searchPrimes(task.parameters, (ops) => {
-            operationsCompleted = ops
-            this.reportProgress(task.id, ops, startTime)
+          result = await this.searchPrimes(task.parameters, (ops) => {
+            operations = ops
+            if (this.progressCallback) {
+              this.progressCallback(Math.min(ops / (task.parameters.target_primes * 100), 1), ops)
+            }
           })
           break
+
         case "hash_computation":
-          resultData = await this.computeHashes(task.parameters, (ops) => {
-            operationsCompleted = ops
-            this.reportProgress(task.id, ops, startTime)
+          result = await this.computeHashes(task.parameters, (ops) => {
+            operations = ops
+            if (this.progressCallback) {
+              this.progressCallback(Math.min(ops / task.parameters.iterations, 1), ops)
+            }
           })
           break
+
         case "matrix_operations":
-          resultData = await this.performMatrixOperations(task.parameters, (ops) => {
-            operationsCompleted = ops
-            this.reportProgress(task.id, ops, startTime)
+          result = await this.performMatrixOperations(task.parameters, (ops) => {
+            operations = ops
+            if (this.progressCallback) {
+              this.progressCallback(Math.min(ops / (task.parameters.matrix_size * 100), 1), ops)
+            }
           })
           break
-        case "crypto_analysis":
-          resultData = await this.performCryptoAnalysis(task.parameters, (ops) => {
-            operationsCompleted = ops
-            this.reportProgress(task.id, ops, startTime)
+
+        case "factorial_computation":
+          result = await this.computeFactorial(task.parameters.max_number, (ops) => {
+            operations = ops
+            if (this.progressCallback) {
+              this.progressCallback(Math.min(ops / (task.parameters.max_number * 10), 1), ops)
+            }
           })
           break
+
+        case "fibonacci_sequence":
+          result = await this.computeFibonacci(task.parameters.sequence_length, (ops) => {
+            operations = ops
+            if (this.progressCallback) {
+              this.progressCallback(Math.min(ops / task.parameters.sequence_length, 1), ops)
+            }
+          })
+          break
+
+        case "pi_calculation":
+          result = await this.calculatePi(task.parameters.digits, (ops) => {
+            operations = ops
+            if (this.progressCallback) {
+              this.progressCallback(Math.min(ops / (task.parameters.digits * 1000), 1), ops)
+            }
+          })
+          break
+
+        case "sha256_mining":
+          result = await this.mineSHA256(task.parameters.target_pattern, (ops) => {
+            operations = ops
+            if (this.progressCallback) {
+              this.progressCallback(Math.min(ops / 1000000, 1), ops)
+            }
+          })
+          break
+
         default:
           throw new Error(`Unknown task type: ${task.type}`)
       }
 
-      const endTime = performance.now()
-      const computeTime = Math.round(endTime - startTime)
+      const computationTime = Date.now() - startTime
+      const verificationHash = await this.generateVerificationHash(result, task)
+      const proofOfWork = await this.generateProofOfWork(result, task)
 
-      const result: TaskResult = {
+      return {
         task_id: task.id,
-        result_data: resultData,
-        compute_time_ms: computeTime,
-        operations_completed: operationsCompleted,
-        verification_hash: await this.generateVerificationHash(resultData),
-        device_signature: await this.generateDeviceSignature(task.id, resultData),
+        result_data: result,
+        computation_time: computationTime,
+        verification_hash: verificationHash,
+        proof_of_work: proofOfWork
       }
 
-      this.onComplete?.(result)
-      return result
-    } catch (error) {
-      const computeError = error instanceof Error ? error : new Error("Unknown compute error")
-      this.onError?.(computeError)
-      throw computeError
     } finally {
       this.isRunning = false
       this.currentTask = null
-      this.abortController = null
     }
   }
 
-  private reportProgress(taskId: string, operationsCompleted: number, startTime: number) {
-    if (!this.onProgress || !this.currentTask) return
-
-    const elapsed = performance.now() - startTime
-    const estimatedTotal = this.currentTask.estimated_duration
-    const progressPercent = Math.min((elapsed / estimatedTotal) * 100, 99)
-
-    const progress: ComputeProgress = {
-      task_id: taskId,
-      progress_percent: progressPercent,
-      operations_completed: operationsCompleted,
-      estimated_remaining_ms: Math.max(estimatedTotal - elapsed, 0),
-      current_operation: this.getCurrentOperationDescription(),
-    }
-
-    this.onProgress(progress)
-  }
-
-  private getCurrentOperationDescription(): string {
-    if (!this.currentTask) return "Unknown"
-
-    switch (this.currentTask.type) {
-      case "prime_search":
-        return "Searching for prime numbers"
-      case "hash_computation":
-        return "Computing cryptographic hashes"
-      case "matrix_operations":
-        return "Performing matrix calculations"
-      case "crypto_analysis":
-        return "Analyzing cryptographic patterns"
-      default:
-        return "Processing data"
-    }
-  }
-
-  private verifyTaskSignature(task: ComputeTask): boolean {
-    return this.allowedSignatures.has(task.signature) && this.verifyTaskHash(task)
-  }
-
-  private async verifyTaskHash(task: ComputeTask): Promise<boolean> {
-    try {
-      const expectedHash = await this.generateTaskHash(task.operation_id, task.parameters)
-      return task.hash === expectedHash
-    } catch (error) {
-      console.error("Hash verification failed:", error)
-      return false
-    }
-  }
-
-  private async generateTaskHash(operationId: string, parameters: any): Promise<string> {
-    const data = `${operationId}_${JSON.stringify(parameters)}_${Date.now()}`
-    const encoder = new TextEncoder()
-    const dataBuffer = encoder.encode(data)
-    const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer)
-    const hashArray = Array.from(new Uint8Array(hashBuffer))
-    return `hash_${hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")}`
-  }
-
-  private async searchPrimes(
-    params: { start: number; end: number; algorithm?: string },
-    onProgress: (operations: number) => void,
-  ): Promise<{ primes: number[]; algorithm_used: string; range: { start: number; end: number } }> {
-    const { start, end, algorithm = "sieve" } = params
-    let primes: number[] = []
-    let operations = 0
-
-    if (algorithm === "sieve" && end - start <= 1000000) {
-      // Use Sieve of Eratosthenes for better performance on smaller ranges
-      primes = await this.sieveOfEratosthenes(start, end, (ops) => {
-        operations = ops
-        onProgress(ops)
-      })
-    } else {
-      // Use trial division for larger ranges or when specified
-      primes = await this.trialDivisionPrimes(start, end, (ops) => {
-        operations = ops
-        onProgress(ops)
-      })
-    }
-
-    return {
-      primes,
-      algorithm_used: algorithm === "sieve" ? "Sieve of Eratosthenes" : "Trial Division",
-      range: { start, end },
-    }
-  }
-
-  private async sieveOfEratosthenes(
-    start: number,
-    end: number,
-    onProgress: (operations: number) => void,
-  ): Promise<number[]> {
-    const range = end - start + 1
-    const sieve = new Array(range).fill(true)
+  private async searchPrimes(params: any, onProgress: (operations: number) => void): Promise<any> {
+    const { range_size, target_primes } = params
     const primes: number[] = []
     let operations = 0
+    const sieve = new Array(range_size + 1).fill(true)
+    sieve[0] = sieve[1] = false
 
-    // Handle edge cases
-    if (start <= 1) {
-      sieve[0] = false // 0 is not prime
-      if (range > 1) sieve[1] = false // 1 is not prime
-    }
-
-    const sqrtEnd = Math.sqrt(end)
-
-    for (let p = 2; p <= sqrtEnd && this.isRunning; p++) {
-      if (this.abortController?.signal.aborted) break
-
-      // Find the first multiple of p in the range [start, end]
-      const firstMultiple = Math.max(p * p, Math.ceil(start / p) * p)
-
-      // Mark multiples of p as not prime
-      for (let multiple = firstMultiple; multiple <= end; multiple += p) {
-        const index = multiple - start
-        if (index >= 0 && index < range) {
-          sieve[index] = false
-        }
-        operations++
-
-        if (operations % 10000 === 0) {
-          onProgress(operations)
-          await new Promise((resolve) => setTimeout(resolve, 1))
+    // Sieve of Eratosthenes with progress tracking
+    for (let i = 2; i * i <= range_size; i++) {
+      if (sieve[i]) {
+        for (let j = i * i; j <= range_size; j += i) {
+          sieve[j] = false
+          operations++
+          if (operations % 10000 === 0) {
+            onProgress(operations)
+            await this.yieldControl()
+          }
         }
       }
     }
 
     // Collect primes
-    for (let i = 0; i < range; i++) {
-      if (sieve[i] && start + i >= 2) {
-        primes.push(start + i)
-      }
-    }
-
-    return primes
-  }
-
-  private async trialDivisionPrimes(
-    start: number,
-    end: number,
-    onProgress: (operations: number) => void,
-  ): Promise<number[]> {
-    const primes: number[] = []
-    let operations = 0
-
-    for (let num = Math.max(start, 2); num <= end && this.isRunning; num++) {
-      if (this.abortController?.signal.aborted) break
-
-      if (this.isPrime(num)) {
-        primes.push(num)
-      }
-      operations++
-
-      if (operations % 1000 === 0) {
-        onProgress(operations)
-        await new Promise((resolve) => setTimeout(resolve, 1))
-      }
-    }
-
-    return primes
-  }
-
-  private async computeHashes(
-    params: { data: string[]; algorithm: string; iterations?: number },
-    onProgress: (operations: number) => void,
-  ): Promise<{ hashes: string[]; algorithm: string; total_iterations: number }> {
-    const { data, algorithm, iterations = 1 } = params
-    const hashes: string[] = []
-    let operations = 0
-
-    for (let i = 0; i < data.length && this.isRunning; i++) {
-      if (this.abortController?.signal.aborted) break
-
-      let currentHash = data[i]
-
-      // Perform multiple iterations for increased computational load
-      for (let iter = 0; iter < iterations; iter++) {
-        currentHash = await this.computeHash(currentHash, algorithm)
+    for (let i = 2; i <= range_size && primes.length < target_primes; i++) {
+      if (sieve[i]) {
+        primes.push(i)
         operations++
-
-        if (operations % 100 === 0) {
+        if (operations % 1000 === 0) {
           onProgress(operations)
-          await new Promise((resolve) => setTimeout(resolve, 1))
+          await this.yieldControl()
         }
       }
-
-      hashes.push(currentHash)
     }
 
     return {
-      hashes,
-      algorithm,
-      total_iterations: operations,
+      primes: primes.slice(0, target_primes),
+      total_primes_found: primes.length,
+      range_searched: range_size,
+      operations_performed: operations
     }
   }
 
-  private async performMatrixOperations(
-    params: { matrix_a: number[][]; matrix_b?: number[][]; operation: string; size?: number },
-    onProgress: (operations: number) => void,
-  ): Promise<{ result: number[][] | number; operation: string; dimensions: string }> {
-    const { matrix_a, matrix_b, operation, size = 100 } = params
+  private async computeHashes(params: any, onProgress: (operations: number) => void): Promise<any> {
+    const { hash_function, pattern_length, iterations } = params
+    const results: string[] = []
     let operations = 0
-    let result: number[][] | number
 
-    switch (operation) {
-      case "multiply":
-        if (!matrix_b) throw new Error("Matrix B required for multiplication")
-        result = await this.multiplyMatrices(matrix_a, matrix_b, (ops) => {
-          operations = ops
-          onProgress(ops)
-        })
-        break
-
-      case "transpose":
-        result = await this.transposeMatrix(matrix_a, (ops) => {
-          operations = ops
-          onProgress(ops)
-        })
-        break
-
-      case "determinant":
-        result = await this.calculateDeterminant(matrix_a, (ops) => {
-          operations = ops
-          onProgress(ops)
-        })
-        break
-
-      case "generate_random":
-        result = await this.generateRandomMatrix(size, size, (ops) => {
-          operations = ops
-          onProgress(ops)
-        })
-        break
-
-      default:
-        throw new Error(`Unknown matrix operation: ${operation}`)
-    }
-
-    return {
-      result,
-      operation,
-      dimensions: Array.isArray(result) ? `${result.length}x${result[0]?.length || 0}` : "scalar",
-    }
-  }
-
-  private async performCryptoAnalysis(
-    params: { pattern_length: number; hash_function: string; iterations: number },
-    onProgress: (operations: number) => void,
-  ): Promise<{ patterns: string[]; collisions: number; analysis_time: number }> {
-    const { pattern_length, hash_function, iterations } = params
-    const patterns: string[] = []
-    const hashMap = new Map<string, number>()
-    let operations = 0
-    let collisions = 0
-
-    const startTime = performance.now()
-
-    for (let i = 0; i < iterations && this.isRunning; i++) {
-      if (this.abortController?.signal.aborted) break
-
-      // Generate random data
-      const randomData = this.generateRandomString(pattern_length)
-      const hash = await this.computeHash(randomData, hash_function)
-
-      // Look for patterns (first N characters)
-      const pattern = hash.substring(0, pattern_length)
-      patterns.push(pattern)
-
-      // Check for collisions
-      if (hashMap.has(hash)) {
-        collisions++
-      } else {
-        hashMap.set(hash, i)
-      }
-
+    for (let i = 0; i < iterations; i++) {
+      const data = `data_${i}_${Date.now()}_${Math.random()}`
+      const hash = await this.computeHash(data, hash_function)
+      results.push(hash)
       operations++
 
       if (operations % 1000 === 0) {
         onProgress(operations)
-        await new Promise((resolve) => setTimeout(resolve, 1))
+        await this.yieldControl()
       }
     }
 
-    const endTime = performance.now()
-
     return {
-      patterns: [...new Set(patterns)], // Unique patterns only
-      collisions,
-      analysis_time: endTime - startTime,
+      hashes: results,
+      total_hashes: results.length,
+      hash_function: hash_function,
+      operations_performed: operations
     }
   }
 
-  // Helper methods for matrix operations
-  private async multiplyMatrices(
-    a: number[][],
-    b: number[][],
-    onProgress: (operations: number) => void,
-  ): Promise<number[][]> {
-    const rows = a.length
-    const cols = b[0].length
-    const result: number[][] = Array(rows)
-      .fill(null)
-      .map(() => Array(cols).fill(0))
+  private async performMatrixOperations(params: any, onProgress: (operations: number) => void): Promise<any> {
+    const { matrix_size, precision, operations: ops } = params
+    let totalOperations = 0
 
+    // Generate large matrices
+    const matrix1 = this.generateRandomMatrix(matrix_size, matrix_size)
+    const matrix2 = this.generateRandomMatrix(matrix_size, matrix_size)
+    totalOperations += matrix_size * matrix_size * 2
+
+    const results: any = {}
+
+    if (ops.includes("multiply")) {
+      const start = Date.now()
+      const product = await this.multiplyMatrices(matrix1, matrix2, (ops) => {
+        totalOperations += ops
+        onProgress(totalOperations)
+      })
+      results.multiplication = {
+        result: product,
+        time_ms: Date.now() - start,
+        operations: totalOperations
+      }
+    }
+
+    if (ops.includes("transpose")) {
+      const start = Date.now()
+      const transpose = await this.transposeMatrix(matrix1, (ops) => {
+        totalOperations += ops
+        onProgress(totalOperations)
+      })
+      results.transpose = {
+        result: transpose,
+        time_ms: Date.now() - start,
+        operations: totalOperations
+      }
+    }
+
+    if (ops.includes("determinant")) {
+      const start = Date.now()
+      const det = await this.calculateDeterminant(matrix1, (ops) => {
+        totalOperations += ops
+        onProgress(totalOperations)
+      })
+      results.determinant = {
+        result: det,
+        time_ms: Date.now() - start,
+        operations: totalOperations
+      }
+    }
+
+    return {
+      matrix_size: matrix_size,
+      operations_performed: totalOperations,
+      results: results
+    }
+  }
+
+  private async computeFactorial(maxNumber: number, onProgress: (operations: number) => void): Promise<any> {
+    let operations = 0
+    const factorials: bigint[] = []
+    
+    for (let i = 1; i <= maxNumber; i++) {
+      let factorial = BigInt(1)
+      for (let j = 2; j <= i; j++) {
+        factorial *= BigInt(j)
+        operations++
+        if (operations % 10000 === 0) {
+          onProgress(operations)
+          await this.yieldControl()
+        }
+      }
+      factorials.push(factorial)
+    }
+
+    return {
+      factorials: factorials.map(f => f.toString()),
+      max_number: maxNumber,
+      operations_performed: operations
+    }
+  }
+
+  private async computeFibonacci(length: number, onProgress: (operations: number) => void): Promise<any> {
+    let operations = 0
+    const sequence: bigint[] = [BigInt(0), BigInt(1)]
+    
+    for (let i = 2; i < length; i++) {
+      sequence.push(sequence[i - 1] + sequence[i - 2])
+      operations++
+      if (operations % 10000 === 0) {
+        onProgress(operations)
+        await this.yieldControl()
+      }
+    }
+
+    return {
+      sequence: sequence.map(f => f.toString()),
+      length: sequence.length,
+      operations_performed: operations
+    }
+  }
+
+  private async calculatePi(digits: number, onProgress: (operations: number) => void): Promise<any> {
+    let operations = 0
+    let pi = 0
+    let sign = 1
+    
+    // Leibniz formula for π
+    for (let i = 0; i < digits * 1000; i++) {
+      pi += sign / (2 * i + 1)
+      sign = -sign
+      operations++
+      
+      if (operations % 10000 === 0) {
+        onProgress(operations)
+        await this.yieldControl()
+      }
+    }
+    
+    pi *= 4
+
+    return {
+      pi_approximation: pi,
+      digits_requested: digits,
+      operations_performed: operations
+    }
+  }
+
+  private async mineSHA256(targetPattern: string, onProgress: (operations: number) => void): Promise<any> {
+    let operations = 0
+    let nonce = 0
+    let hash = ""
+    
+    while (!hash.startsWith(targetPattern) && operations < 1000000) {
+      const data = `block_${Date.now()}_${nonce}_${Math.random()}`
+      hash = await this.computeHash(data, "sha256")
+      nonce++
+      operations++
+      
+      if (operations % 10000 === 0) {
+        onProgress(operations)
+        await this.yieldControl()
+      }
+    }
+
+    return {
+      hash_found: hash,
+      nonce_used: nonce,
+      target_pattern: targetPattern,
+      operations_performed: operations
+    }
+  }
+
+  private async multiplyMatrices(matrix1: number[][], matrix2: number[][], onProgress: (operations: number) => void): Promise<number[][]> {
+    const rows = matrix1.length
+    const cols = matrix2[0].length
+    const result: number[][] = Array(rows).fill(null).map(() => Array(cols).fill(0))
     let operations = 0
 
-    for (let i = 0; i < rows && this.isRunning; i++) {
-      result[i] = Array(cols).fill(0)
+    for (let i = 0; i < rows; i++) {
       for (let j = 0; j < cols; j++) {
-        for (let k = 0; k < b.length; k++) {
-          result[i][j] += a[i][k] * b[k][j]
+        for (let k = 0; k < matrix1[0].length; k++) {
+          result[i][j] += matrix1[i][k] * matrix2[k][j]
           operations++
-
-          if (operations % 10000 === 0) {
-            onProgress(operations)
-            await new Promise((resolve) => setTimeout(resolve, 1))
-          }
+        }
+        if (operations % 10000 === 0) {
+          onProgress(operations)
+          await this.yieldControl()
         }
       }
     }
@@ -458,20 +363,16 @@ export class ComputeEngine {
   private async transposeMatrix(matrix: number[][], onProgress: (operations: number) => void): Promise<number[][]> {
     const rows = matrix.length
     const cols = matrix[0].length
-    const result: number[][] = Array(cols)
-      .fill(null)
-      .map(() => Array(rows).fill(0))
-
+    const result: number[][] = Array(cols).fill(null).map(() => Array(rows).fill(0))
     let operations = 0
 
-    for (let i = 0; i < rows && this.isRunning; i++) {
+    for (let i = 0; i < rows; i++) {
       for (let j = 0; j < cols; j++) {
         result[j][i] = matrix[i][j]
         operations++
-
-        if (operations % 1000 === 0) {
+        if (operations % 10000 === 0) {
           onProgress(operations)
-          await new Promise((resolve) => setTimeout(resolve, 1))
+          await this.yieldControl()
         }
       }
     }
@@ -481,143 +382,95 @@ export class ComputeEngine {
 
   private async calculateDeterminant(matrix: number[][], onProgress: (operations: number) => void): Promise<number> {
     const n = matrix.length
-    if (n !== matrix[0].length) throw new Error("Matrix must be square for determinant calculation")
-
     let operations = 0
-    let det = 1
-    const temp = matrix.map((row) => [...row]) // Copy matrix
 
-    // Gaussian elimination
-    for (let i = 0; i < n && this.isRunning; i++) {
-      // Find pivot
-      let maxRow = i
-      for (let k = i + 1; k < n; k++) {
-        if (Math.abs(temp[k][i]) > Math.abs(temp[maxRow][i])) {
-          maxRow = k
-        }
-        operations++
+    if (n === 1) return matrix[0][0]
+    if (n === 2) return matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]
+
+    let det = 0
+    for (let i = 0; i < n; i++) {
+      const minor = this.getMinor(matrix, 0, i)
+      det += matrix[0][i] * Math.pow(-1, i) * await this.calculateDeterminant(minor, (ops) => {
+        operations += ops
+        onProgress(operations)
+      })
+      operations++
+      if (operations % 1000 === 0) {
+        onProgress(operations)
+        await this.yieldControl()
       }
-
-      // Swap rows if needed
-      if (maxRow !== i) {
-        ;[temp[i], temp[maxRow]] = [temp[maxRow], temp[i]]
-        det *= -1
-      }
-
-      // Make all rows below this one 0 in current column
-      for (let k = i + 1; k < n; k++) {
-        const factor = temp[k][i] / temp[i][i]
-        for (let j = i; j < n; j++) {
-          temp[k][j] -= factor * temp[i][j]
-          operations++
-
-          if (operations % 1000 === 0) {
-            onProgress(operations)
-            await new Promise((resolve) => setTimeout(resolve, 1))
-          }
-        }
-      }
-
-      det *= temp[i][i]
     }
 
     return det
   }
 
-  private async generateRandomMatrix(
-    rows: number,
-    cols: number,
-    onProgress: (operations: number) => void,
-  ): Promise<number[][]> {
-    const result: number[][] = Array(rows)
-      .fill(null)
-      .map(() => Array(cols).fill(0))
+  private getMinor(matrix: number[][], row: number, col: number): number[][] {
+    return matrix.filter((_, i) => i !== row).map(row => row.filter((_, j) => j !== col))
+  }
 
-    let operations = 0
+  private generateRandomMatrix(rows: number, cols: number): number[][] {
+    const result: number[][] = Array(rows).fill(null).map(() => Array(cols).fill(0))
 
-    for (let i = 0; i < rows && this.isRunning; i++) {
+    for (let i = 0; i < rows; i++) {
       for (let j = 0; j < cols; j++) {
         result[i][j] = Math.random() * 100 - 50 // Random number between -50 and 50
-        operations++
-
-        if (operations % 10000 === 0) {
-          onProgress(operations)
-          await new Promise((resolve) => setTimeout(resolve, 1))
-        }
       }
     }
 
     return result
   }
 
-  private generateRandomString(length: number): string {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    let result = ""
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length))
+  private async computeHash(data: string, algorithm: string): Promise<string> {
+    if (algorithm === "sha256") {
+      const encoder = new TextEncoder()
+      const dataBuffer = encoder.encode(data)
+      const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer)
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      return hashArray.map(b => b.toString(16).padStart(2, "0")).join("")
     }
-    return result
-  }
-
-  private async generateVerificationHash(data: any): Promise<string> {
-    const jsonString = JSON.stringify(data)
-    return await this.computeHash(jsonString, "SHA-256")
-  }
-
-  private async generateDeviceSignature(taskId: string, resultData: any): Promise<string> {
-    const deviceInfo = navigator.userAgent + navigator.platform
-    const signatureData = taskId + JSON.stringify(resultData) + deviceInfo
-    return await this.computeHash(signatureData, "SHA-256")
-  }
-
-  private isPrime(num: number): boolean {
-    if (num < 2) return false
-    if (num === 2) return true
-    if (num % 2 === 0) return false
-
-    for (let i = 3; i <= Math.sqrt(num); i += 2) {
-      if (num % i === 0) return false
+    
+    // Fallback to simple hash for other algorithms
+    let hash = 0
+    for (let i = 0; i < data.length; i++) {
+      const char = data.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash // Convert to 32-bit integer
     }
-
-    return true
+    return Math.abs(hash).toString(16)
   }
 
-  private async computeHash(data: string, algorithm = "SHA-256"): Promise<string> {
-    const encoder = new TextEncoder()
-    const dataBuffer = encoder.encode(data)
+  private async generateVerificationHash(result: any, task: ComputeTask): Promise<string> {
+    const data = JSON.stringify(result) + task.hash + task.signature
+    return await this.computeHash(data, "sha256")
+  }
 
-    let hashBuffer: ArrayBuffer
-
-    switch (algorithm.toUpperCase()) {
-      case "SHA-1":
-        hashBuffer = await crypto.subtle.digest("SHA-1", dataBuffer)
-        break
-      case "SHA-256":
-        hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer)
-        break
-      case "SHA-384":
-        hashBuffer = await crypto.subtle.digest("SHA-384", dataBuffer)
-        break
-      case "SHA-512":
-        hashBuffer = await crypto.subtle.digest("SHA-512", dataBuffer)
-        break
-      default:
-        hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer)
+  private async generateProofOfWork(result: any, task: ComputeTask): Promise<string> {
+    const data = JSON.stringify(result) + task.hash
+    let nonce = 0
+    let hash = ""
+    
+    while (!hash.startsWith("000") && nonce < 10000) {
+      hash = await this.computeHash(data + nonce, "sha256")
+      nonce++
     }
-
-    const hashArray = Array.from(new Uint8Array(hashBuffer))
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
+    
+    return hash
   }
 
-  stop(): void {
+  private async yieldControl(): Promise<void> {
+    // Allow other tasks to run
+    await new Promise(resolve => setTimeout(resolve, 1))
+  }
+
+  public stop(): void {
     this.isRunning = false
-    this.abortController?.abort()
   }
 
-  getStatus(): { isRunning: boolean; currentTask: ComputeTask | null } {
-    return {
-      isRunning: this.isRunning,
-      currentTask: this.currentTask,
-    }
+  public isCurrentlyRunning(): boolean {
+    return this.isRunning
+  }
+
+  public getCurrentTask(): ComputeTask | null {
+    return this.currentTask
   }
 }

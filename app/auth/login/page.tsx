@@ -1,8 +1,6 @@
 "use client"
 
 import type React from "react"
-import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -11,46 +9,21 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Shield, Phone, Mail } from "lucide-react"
+import { Shield, Mail, Lock, Eye, EyeOff, AlertTriangle } from "lucide-react"
 
 export default function LoginPage() {
-  const [phone, setPhone] = useState("")
-  const [otp, setOtp] = useState("")
-  const [otpSent, setOtpSent] = useState(false)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
-  const validatePhoneNumber = (phoneNumber: string): { isValid: boolean; formatted?: string; error?: string } => {
-    try {
-      if (!phoneNumber.trim()) {
-        return { isValid: false, error: "Phone number is required" }
-      }
-
-      const parsed = parsePhoneNumber(phoneNumber)
-      if (!parsed) {
-        return { isValid: false, error: "Invalid phone number format" }
-      }
-
-      if (!isValidPhoneNumber(phoneNumber)) {
-        return { isValid: false, error: "Invalid phone number" }
-      }
-
-      return {
-        isValid: true,
-        formatted: parsed.formatInternational(),
-      }
-    } catch (error) {
-      return { isValid: false, error: "Invalid phone number format" }
-    }
-  }
-
-  const handleSendOTP = async (e: React.FormEvent) => {
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    const phoneValidation = validatePhoneNumber(phone)
-    if (!phoneValidation.isValid) {
-      setError(phoneValidation.error || "Invalid phone number")
+    
+    if (!email.trim() || !password.trim()) {
+      setError("Email and password are required")
       return
     }
 
@@ -59,40 +32,43 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: phoneValidation.formatted!,
-        options: {
-          shouldCreateUser: true,
-        },
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: password,
       })
 
       if (error) throw error
-      setPhone(phoneValidation.formatted!) // Update with formatted number
-      setOtpSent(true)
+
+      if (data.user) {
+        try {
+          // Check if user needs to complete profile setup
+          const { data: profile, error: profileError } = await supabase
+            .from("users")
+            .select("username, display_name")
+            .eq("id", data.user.id)
+            .single()
+
+          if (profileError) {
+            console.warn("Profile fetch error:", profileError)
+            // If profile doesn't exist, redirect to consent page to create it
+            router.push("/consent")
+            return
+          }
+
+          if (!profile?.username || !profile?.display_name) {
+            router.push("/consent")
+          } else {
+            router.push("/dashboard")
+          }
+        } catch (profileError: any) {
+          console.warn("Profile check failed:", profileError)
+          // If there's any error fetching profile, redirect to consent page
+          router.push("/consent")
+        }
+      }
     } catch (error: any) {
-      setError(error.message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const supabase = createClient()
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        phone: phone,
-        token: otp,
-        type: "sms",
-      })
-
-      if (error) throw error
-      router.push("/dashboard")
-    } catch (error: any) {
-      setError(error.message)
+      console.error("Login error:", error)
+      setError(error.message || "Authentication failed")
     } finally {
       setIsLoading(false)
     }
@@ -107,13 +83,14 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/dashboard`,
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       })
 
       if (error) throw error
     } catch (error: any) {
-      setError(error.message)
+      console.error("Google sign-in error:", error)
+      setError(error.message || "Google sign-in failed")
     } finally {
       setIsLoading(false)
     }
@@ -125,7 +102,7 @@ export default function LoginPage() {
         {/* Header */}
         <div className="text-center mb-6 sm:mb-8">
           <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-blue-500 text-white mb-3 sm:mb-4">
-            <Shield className="w-6 h-6 sm:w-8 sm:h-8" />
+            <Shield className="w-6 h-6 sm:w-8 sm:w-8" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold mb-2 dedsec-glow text-blue-400">DedSecCompute</h1>
           <p className="text-sm sm:text-base text-cyan-300">Distributed Computing Collective</p>
@@ -134,119 +111,112 @@ export default function LoginPage() {
         <Card className="dedsec-border bg-slate-950/80">
           <CardHeader className="pb-4 sm:pb-6">
             <CardTitle className="text-blue-400 text-lg sm:text-xl">
-              {otpSent ? "> Verify Access Code" : "> Access Network"}
+              Access Network
             </CardTitle>
-            <CardDescription className="text-cyan-300 text-sm">
-              {otpSent ? "Enter the verification code sent to your phone" : "Authenticate to join the collective"}
+            <CardDescription className="text-cyan-300">
+              Sign in to access the distributed computing network
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 sm:space-y-6">
-            {!otpSent ? (
-              <>
-                {/* Phone OTP Form */}
-                <form onSubmit={handleSendOTP} className="space-y-4">
-                  <div>
-                    <Label htmlFor="phone" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
-                      <Phone className="w-4 h-4" />
-                      Phone Number
-                    </Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      placeholder="+1 (555) 123-4567"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11"
-                      required
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    className="w-full dedsec-button h-10 sm:h-11 text-sm sm:text-base"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "Sending OTP..." : "Send OTP"}
-                  </Button>
-                </form>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-blue-400/30"></div>
-                  </div>
-                  <div className="relative flex justify-center text-xs sm:text-sm">
-                    <span className="bg-slate-950 px-2 text-blue-600">OR</span>
-                  </div>
-                </div>
-
-                {/* Google Sign In */}
-                <Button
-                  onClick={handleGoogleSignIn}
-                  className="w-full dedsec-button flex items-center gap-2 h-10 sm:h-11 text-sm sm:text-base"
-                  disabled={isLoading}
-                >
+            <form onSubmit={handleEmailLogin} className="space-y-4">
+              <div>
+                <Label htmlFor="email" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
                   <Mail className="w-4 h-4" />
-                  Continue with Google
-                </Button>
-              </>
-            ) : (
-              /* OTP Verification Form */
-              <form onSubmit={handleVerifyOTP} className="space-y-4">
-                <div>
-                  <Label htmlFor="otp" className="text-blue-400 text-sm sm:text-base">
-                    Verification Code
-                  </Label>
+                  Email Address
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="user@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11"
+                  required
+                  autoComplete="email"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="password" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
+                  <Lock className="w-4 h-4" />
+                  Password
+                </Label>
+                <div className="relative">
                   <Input
-                    id="otp"
-                    type="text"
-                    placeholder="123456"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-center text-xl sm:text-2xl tracking-widest h-12 sm:h-14"
-                    maxLength={6}
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11 pr-12"
                     required
+                    autoComplete="current-password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-400 hover:text-blue-300"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
-                <Button
-                  type="submit"
-                  className="w-full dedsec-button h-10 sm:h-11 text-sm sm:text-base"
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Verifying..." : "Verify & Access"}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => setOtpSent(false)}
-                  className="w-full bg-transparent border border-blue-400 text-blue-400 hover:bg-blue-400 hover:text-slate-950 h-10 sm:h-11 text-sm sm:text-base"
-                >
-                  Back to Phone Entry
-                </Button>
-              </form>
-            )}
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm sm:text-base h-10 sm:h-11"
+                disabled={isLoading}
+              >
+                {isLoading ? "Signing In..." : "Access Network"}
+              </Button>
+            </form>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-blue-400/30" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-slate-950 px-2 text-cyan-300">Or continue with</span>
+              </div>
+            </div>
+
+            <Button
+              onClick={handleGoogleSignIn}
+              variant="outline"
+              className="w-full border-blue-400 text-blue-400 hover:bg-blue-400 hover:text-white font-bold text-sm sm:text-base h-10 sm:h-11"
+              disabled={isLoading}
+            >
+              <Shield className="w-4 h-4 mr-2" />
+              {isLoading ? "Connecting..." : "Continue with Google"}
+            </Button>
 
             {error && (
-              <div className="text-red-400 text-xs sm:text-sm text-center p-2 sm:p-3 border border-red-400 rounded">
+              <div className="text-red-400 text-sm text-center p-3 border border-red-400 rounded flex items-center gap-2 justify-center">
+                <AlertTriangle className="w-4 h-4" />
                 {error}
               </div>
             )}
 
-            <div className="text-center text-xs sm:text-sm text-blue-600">
-              New to the collective?{" "}
-              <Link href="/auth/signup" className="text-blue-400 hover:text-cyan-300 underline">
-                Join now
+            <div className="text-center text-sm text-cyan-300">
+              <p className="mb-2">Don't have an account?</p>
+              <Link
+                href="/auth/signup"
+                className="text-blue-400 hover:text-blue-300 underline font-medium"
+              >
+                Join the Collective
+              </Link>
+            </div>
+
+            <div className="text-center text-sm text-cyan-300">
+              <Link
+                href="/auth/forgot-password"
+                className="text-blue-400 hover:text-blue-300 underline"
+              >
+                Forgot Password?
               </Link>
             </div>
           </CardContent>
         </Card>
-
-        {/* Admin Access */}
-        <div className="text-center mt-4 sm:mt-6">
-          <Link
-            href="/admin"
-            className="text-orange-400 hover:text-orange-300 text-xs sm:text-sm underline opacity-50 hover:opacity-100 transition-opacity"
-          >
-            Admin Access
-          </Link>
-        </div>
       </div>
     </div>
   )

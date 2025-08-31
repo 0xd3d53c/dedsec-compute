@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -11,45 +10,51 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Shield, Phone, Mail, Users } from "lucide-react"
-import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js"
+import { Shield, Mail, Lock, Eye, EyeOff, AlertTriangle, Users } from "lucide-react"
 
 export default function SignUpPage() {
-  const [phone, setPhone] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [displayName, setDisplayName] = useState("")
   const [inviteCode, setInviteCode] = useState("")
-  const [otp, setOtp] = useState("")
-  const [otpSent, setOtpSent] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
-  const validatePhoneNumber = (phoneNumber: string): { isValid: boolean; formatted?: string; error?: string } => {
-    try {
-      if (!phoneNumber.trim()) {
-        return { isValid: false, error: "Phone number is required" }
-      }
-
-      const parsed = parsePhoneNumber(phoneNumber)
-      if (!parsed) {
-        return { isValid: false, error: "Invalid phone number format" }
-      }
-
-      if (!isValidPhoneNumber(phoneNumber)) {
-        return { isValid: false, error: "Invalid phone number" }
-      }
-
-      return {
-        isValid: true,
-        formatted: parsed.formatInternational(),
-      }
-    } catch (error) {
-      return { isValid: false, error: "Invalid phone number format" }
+  const validatePassword = (password: string): { isValid: boolean; errors: string[] } => {
+    const errors: string[] = []
+    
+    if (password.length < 12) {
+      errors.push("Password must be at least 12 characters long")
+    }
+    
+    if (!/(?=.*[a-z])/.test(password)) {
+      errors.push("Password must contain at least one lowercase letter")
+    }
+    
+    if (!/(?=.*[A-Z])/.test(password)) {
+      errors.push("Password must contain at least one uppercase letter")
+    }
+    
+    if (!/(?=.*\d)/.test(password)) {
+      errors.push("Password must contain at least one number")
+    }
+    
+    if (!/(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(password)) {
+      errors.push("Password must contain at least one special character")
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
     }
   }
 
-  const handleSendOTP = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!consent) {
@@ -57,9 +62,19 @@ export default function SignUpPage() {
       return
     }
 
-    const phoneValidation = validatePhoneNumber(phone)
-    if (!phoneValidation.isValid) {
-      setError(phoneValidation.error || "Invalid phone number")
+    if (!email.trim() || !password || !confirmPassword || !displayName.trim()) {
+      setError("All fields are required")
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match")
+      return
+    }
+
+    const passwordValidation = validatePassword(password)
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.errors.join(", "))
       return
     }
 
@@ -68,45 +83,55 @@ export default function SignUpPage() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: phoneValidation.formatted!,
+      // Create user with email and password
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password: password,
         options: {
-          shouldCreateUser: true,
           data: {
-            display_name: displayName,
-            phone: phoneValidation.formatted!,
-            invite_code: inviteCode,
+            display_name: displayName.trim(),
+            username: displayName.trim().toLowerCase().replace(/[^a-z0-9]/g, ''),
+            invite_code: inviteCode.trim() || null,
           },
         },
       })
 
       if (error) throw error
-      setPhone(phoneValidation.formatted!) // Update with formatted number
-      setOtpSent(true)
+
+      if (data.user) {
+        console.log("User created successfully:", data.user.id)
+        
+        // Wait a moment for the database trigger to process
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Check if profile was created successfully
+        try {
+          const { data: profile, error: profileError } = await supabase
+            .from("users")
+            .select("username, display_name")
+            .eq("id", data.user.id)
+            .single()
+
+          if (profileError) {
+            console.warn("Profile not found, redirecting to consent:", profileError)
+            // Profile wasn't created by trigger, redirect to consent to create it manually
+            router.push("/consent")
+          } else if (!profile?.username || !profile?.display_name) {
+            console.log("Profile incomplete, redirecting to consent")
+            router.push("/consent")
+          } else {
+            console.log("Profile complete, redirecting to dashboard")
+            router.push("/dashboard")
+          }
+        } catch (profileError: any) {
+          console.warn("Profile check failed, redirecting to consent:", profileError)
+          // Any error means profile isn't ready, redirect to consent
+          router.push("/consent")
+        }
+      }
     } catch (error: any) {
-      setError(error.message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const supabase = createClient()
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        phone: phone,
-        token: otp,
-        type: "sms",
-      })
-
-      if (error) throw error
-      router.push("/consent")
-    } catch (error: any) {
-      setError(error.message)
+      console.error("Signup error:", error)
+      setError(error.message || "Failed to create account")
     } finally {
       setIsLoading(false)
     }
@@ -126,11 +151,7 @@ export default function SignUpPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/consent`,
-          queryParams: {
-            display_name: displayName,
-            invite_code: inviteCode,
-          },
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       })
 
@@ -150,154 +171,182 @@ export default function SignUpPage() {
           <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-blue-500 text-white mb-3 sm:mb-4">
             <Shield className="w-6 h-6 sm:w-8 sm:h-8" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold mb-2 dedsec-glow text-blue-400">Join DedSecCompute</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2 dedsec-glow text-blue-400">Join DedSec</h1>
           <p className="text-sm sm:text-base text-cyan-300">Become part of the collective</p>
         </div>
 
         <Card className="dedsec-border bg-slate-950/80">
           <CardHeader className="pb-4 sm:pb-6">
             <CardTitle className="text-blue-400 text-lg sm:text-xl">
-              {otpSent ? "> Verify Access Code" : "> Register New Follower"}
+               Create Account
             </CardTitle>
             <CardDescription className="text-cyan-300 text-sm">
-              {otpSent
-                ? "Enter the verification code sent to your phone"
-                : "Create your account to join the distributed computing network"}
+              Join the distributed computing network
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 sm:space-y-6">
-            {!otpSent ? (
-              <>
-                {/* Registration Form */}
-                <form onSubmit={handleSendOTP} className="space-y-4">
-                  <div>
-                    <Label htmlFor="displayName" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
-                      <Users className="w-4 h-4" />
-                      Display Name
-                    </Label>
-                    <Input
-                      id="displayName"
-                      type="text"
-                      placeholder="Anonymous Hacker"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="phone" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
-                      <Phone className="w-4 h-4" />
-                      Phone Number
-                    </Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      placeholder="+1 (555) 123-4567"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="inviteCode" className="text-blue-400 text-sm sm:text-base">
-                      Invite Code (Optional)
-                    </Label>
-                    <Input
-                      id="inviteCode"
-                      type="text"
-                      placeholder="d3d_XXXXXXXX"
-                      value={inviteCode}
-                      onChange={(e) => setInviteCode(e.target.value)}
-                      className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11"
-                    />
-                  </div>
-
-                  {/* Consent Checkbox */}
-                  <div className="flex items-start space-x-2">
-                    <Checkbox
-                      id="consent"
-                      checked={consent}
-                      onCheckedChange={(checked) => setConsent(checked as boolean)}
-                      className="border-blue-400 data-[state=checked]:bg-blue-400 data-[state=checked]:text-slate-950 mt-1"
-                    />
-                    <Label htmlFor="consent" className="text-xs sm:text-sm text-cyan-300 leading-relaxed">
-                      I explicitly consent to joining this distributed computing network and understand that:
-                      <ul className="list-disc list-inside mt-2 space-y-1 text-xs">
-                        <li>My device will contribute computing power to approved operations</li>
-                        <li>Resource usage will be limited to my specified caps</li>
-                        <li>Only cryptographically signed tasks will be executed</li>
-                        <li>I can pause or leave the network at any time</li>
-                        <li>My device information will be shared anonymously</li>
-                      </ul>
-                    </Label>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="w-full dedsec-button h-10 sm:h-11 text-sm sm:text-base"
-                    disabled={isLoading || !consent}
-                  >
-                    {isLoading ? "Sending OTP..." : "Send Verification Code"}
-                  </Button>
-                </form>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-blue-400/30"></div>
-                  </div>
-                  <div className="relative flex justify-center text-xs sm:text-sm">
-                    <span className="bg-slate-950 px-2 text-blue-600">OR</span>
-                  </div>
-                </div>
-
-                {/* Google Sign Up */}
-                <Button
-                  onClick={handleGoogleSignUp}
-                  className="w-full dedsec-button flex items-center gap-2 h-10 sm:h-11 text-sm sm:text-base"
-                  disabled={isLoading || !consent}
-                >
+            <form onSubmit={handleSignUp} className="space-y-4">
+              <div>
+                <Label htmlFor="email" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
                   <Mail className="w-4 h-4" />
-                  Continue with Google
-                </Button>
-              </>
-            ) : (
-              /* OTP Verification Form */
-              <form onSubmit={handleVerifyOTP} className="space-y-4">
-                <div>
-                  <Label htmlFor="otp" className="text-blue-400 text-sm sm:text-base">
-                    Verification Code
-                  </Label>
+                  Email Address
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="user@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11"
+                  required
+                  autoComplete="email"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="displayName" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
+                  <Users className="w-4 h-4" />
+                  Display Name
+                </Label>
+                <Input
+                  id="displayName"
+                  type="text"
+                  placeholder="Your display name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11"
+                  required
+                  autoComplete="name"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="inviteCode" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
+                  <Shield className="w-4 h-4" />
+                  Invite Code (Optional)
+                </Label>
+                <Input
+                  id="inviteCode"
+                  type="text"
+                  placeholder="d3d_XXXXXXX"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11"
+                  autoComplete="off"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="password" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
+                  <Lock className="w-4 h-4" />
+                  Password
+                </Label>
+                <div className="relative">
                   <Input
-                    id="otp"
-                    type="text"
-                    placeholder="123456"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-center text-xl sm:text-2xl tracking-widest h-12 sm:h-14"
-                    maxLength={6}
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Create a strong password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11 pr-10"
                     required
+                    autoComplete="new-password"
                   />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-10 sm:h-11 px-3 text-blue-400 hover:text-cyan-300"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </Button>
                 </div>
-                <Button
-                  type="submit"
-                  className="w-full dedsec-button h-10 sm:h-11 text-sm sm:text-base"
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Verifying..." : "Join Collective"}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => setOtpSent(false)}
-                  className="w-full bg-transparent border border-blue-400 text-blue-400 hover:bg-blue-400 hover:text-slate-950 h-10 sm:h-11 text-sm sm:text-base"
-                >
-                  Back to Registration
-                </Button>
-              </form>
-            )}
+              </div>
+
+              <div>
+                <Label htmlFor="confirmPassword" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
+                  <Lock className="w-4 h-4" />
+                  Confirm Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11 pr-10"
+                    required
+                    autoComplete="new-password"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-10 sm:h-11 px-3 text-blue-400 hover:text-cyan-300"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Password Requirements */}
+              <div className="bg-slate-900/50 border border-blue-400/30 rounded-lg p-4">
+                <h4 className="text-blue-400 font-semibold text-sm mb-2 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  Password Requirements
+                </h4>
+                <ul className="text-xs text-cyan-300 space-y-1">
+                  <li>• Minimum 12 characters</li>
+                  <li>• At least one uppercase letter</li>
+                  <li>• At least one lowercase letter</li>
+                  <li>• At least one number</li>
+                  <li>• At least one special character</li>
+                </ul>
+              </div>
+
+              {/* Consent Checkbox */}
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="consent"
+                  checked={consent}
+                  onCheckedChange={(checked) => setConsent(checked as boolean)}
+                  className="border-blue-400 data-[state=checked]:bg-blue-400 data-[state=checked]:text-slate-950"
+                />
+                <Label htmlFor="consent" className="text-xs sm:text-sm text-cyan-300 leading-relaxed">
+                  I explicitly consent to joining the DedSec distributed computing network and understand that my device will contribute computing power to approved tasks.
+                </Label>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full dedsec-button h-10 sm:h-11 text-sm sm:text-base"
+                disabled={isLoading || !consent}
+              >
+                {isLoading ? "Creating Account..." : "Join Collective"}
+              </Button>
+            </form>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-blue-400/30"></div>
+              </div>
+              <div className="relative flex justify-center text-xs sm:text-sm">
+                <span className="bg-slate-950 px-2 text-blue-600">OR</span>
+              </div>
+            </div>
+
+            {/* Google Sign Up */}
+            <Button
+              onClick={handleGoogleSignUp}
+              className="w-full dedsec-button flex items-center gap-2 h-10 sm:h-11 text-sm sm:text-base"
+              disabled={isLoading || !consent}
+            >
+              <Mail className="w-4 h-4" />
+              Continue with Google
+            </Button>
 
             {error && (
               <div className="text-red-400 text-xs sm:text-sm text-center p-2 sm:p-3 border border-red-400 rounded">
@@ -308,20 +357,26 @@ export default function SignUpPage() {
             <div className="text-center text-xs sm:text-sm text-blue-600">
               Already part of the collective?{" "}
               <Link href="/auth/login" className="text-blue-400 hover:text-cyan-300 underline">
-                Access network
+                Sign in
               </Link>
             </div>
           </CardContent>
         </Card>
 
-        {/* Admin Access */}
-        <div className="text-center mt-4 sm:mt-6">
-          <Link
-            href="/admin"
-            className="text-orange-400 hover:text-orange-300 text-xs sm:text-sm underline opacity-50 hover:opacity-100 transition-opacity"
-          >
-            Admin Access
-          </Link>
+        {/* Security Notice */}
+        <div className="mt-6 text-center">
+          <div className="bg-slate-900/50 border border-blue-400/20 rounded-lg p-4">
+            <h4 className="text-blue-400 font-semibold text-sm mb-2 flex items-center gap-2 justify-center">
+              <Shield className="w-4 h-4" />
+              Security & Privacy
+            </h4>
+            <ul className="text-xs text-cyan-300 space-y-1">
+              <li>• End-to-end encrypted authentication</li>
+              <li>• Strong password requirements</li>
+              <li>• Secure session management</li>
+              <li>• No arbitrary code execution</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
