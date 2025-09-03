@@ -23,12 +23,30 @@ function Avatar({
 
 function AvatarImage({
   className,
+  onError,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
+  const [hasError, setHasError] = React.useState(false)
+
+  const handleError = React.useCallback((event: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    setHasError(true)
+    onError?.(event)
+  }, [onError])
+
+  // Reset error state when src changes
+  React.useEffect(() => {
+    setHasError(false)
+  }, [props.src])
+
+  if (hasError) {
+    return null // Let fallback show
+  }
+
   return (
     <AvatarPrimitive.Image
       data-slot="avatar-image"
       className={cn("aspect-square size-full", className)}
+      onError={handleError}
       {...props}
     />
   )

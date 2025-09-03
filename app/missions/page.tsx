@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, CheckCircle2, AlertTriangle, PlayCircle, ListChecks } from "lucide-react"
+import { sanitizeMissionTitle, sanitizeMissionDescription, sanitizeText } from "@/lib/security-utils"
+import MissionCard from "@/components/mission-progress"
 
 type Mission = {
   id: string
@@ -79,16 +81,32 @@ export default function MissionsPage() {
       .select("id, code, title, description, difficulty, tags, is_active, requires_admin, starts_at, ends_at")
       .eq("is_active", true)
       .order("created_at", { ascending: false })
-    setMissions((data as Mission[]) || [])
+    
+    // Sanitize mission data
+    const sanitizedMissions = (data as Mission[] || []).map(mission => ({
+      ...mission,
+      title: sanitizeMissionTitle(mission.title).sanitized,
+      description: sanitizeMissionDescription(mission.description).sanitized,
+      code: sanitizeText(mission.code, 50).sanitized,
+      tags: mission.tags?.map(tag => sanitizeText(tag, 30).sanitized) || null
+    }))
+    
+    setMissions(sanitizedMissions)
   }
 
   const loadMyMissions = async (uid: string) => {
     const { data } = await supabase
       .from("user_missions")
-      .select("id, mission_id, user_id, status, started_at, completed_at")
+      .select(`
+        id, mission_id, user_id, status, started_at, completed_at,
+        missions (
+          id, code, title, description, difficulty, tags, is_active, 
+          requires_admin, starts_at, ends_at
+        )
+      `)
       .eq("user_id", uid)
       .order("updated_at", { ascending: false })
-    setMyMissions((data as UserMission[]) || [])
+    setMyMissions((data as any[]) || [])
   }
 
   const acceptMission = async (mission: Mission) => {
@@ -136,32 +154,12 @@ export default function MissionsPage() {
           <TabsContent value="available">
             <div className="grid sm:grid-cols-2 gap-6">
               {missions.map((m) => (
-                <Card key={m.id} className="dedsec-border bg-slate-950/80">
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
-                      <span>{m.title}</span>
-                      <Badge>{m.difficulty}</Badge>
-                    </CardTitle>
-                    <CardDescription className="text-cyan-300">{m.code}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <p className="text-cyan-300 text-sm leading-relaxed">{m.description}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {(m.tags || []).map((t) => (
-                        <span key={t} className="px-2 py-1 text-xs border border-blue-400/40 rounded">#{t}</span>
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-cyan-300">
-                        {m.starts_at && <span>Starts: {new Date(m.starts_at).toLocaleString()} </span>}
-                        {m.ends_at && <span>Ends: {new Date(m.ends_at).toLocaleString()}</span>}
-                      </div>
-                      <Button className="dedsec-button" onClick={() => acceptMission(m)}>
-                        <PlayCircle className="w-4 h-4 mr-2" /> Accept
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                <MissionCard
+                  key={m.id}
+                  mission={m}
+                  onAccept={acceptMission}
+                  showProgress={true}
+                />
               ))}
               {missions.length === 0 && (
                 <div className="col-span-2 text-center text-blue-600">No missions available.</div>
@@ -172,36 +170,13 @@ export default function MissionsPage() {
           <TabsContent value="my">
             <div className="space-y-4">
               {myMissions.map((um) => (
-                <Card key={um.id} className="dedsec-border bg-slate-950/80">
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <ListChecks className="w-4 h-4" />
-                        <span className="text-sm text-cyan-300">Status:</span>
-                        <Badge>{um.status}</Badge>
-                      </div>
-                      <div className="text-xs text-cyan-300">
-                        {um.started_at && <span>Started: {new Date(um.started_at).toLocaleString()} </span>}
-                        {um.completed_at && <span>Completed: {new Date(um.completed_at).toLocaleString()}</span>}
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      {um.status === "accepted" && (
-                        <Button size="sm" onClick={() => setStatus(um, "in_progress")}>Start</Button>
-                      )}
-                      {um.status === "in_progress" && (
-                        <Button size="sm" className="bg-green-600 hover:bg-green-500" onClick={() => setStatus(um, "completed")}>
-                          <CheckCircle2 className="w-4 h-4 mr-1" /> Complete
-                        </Button>
-                      )}
-                      {um.status !== "completed" && (
-                        <Button size="sm" variant="outline" className="border-red-500 text-red-400" onClick={() => setStatus(um, "abandoned")}>
-                          <AlertTriangle className="w-4 h-4 mr-1" /> Abandon
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                <MissionCard
+                  key={um.id}
+                  mission={um.missions}
+                  userMission={um}
+                  onStatusChange={setStatus}
+                  showProgress={true}
+                />
               ))}
               {myMissions.length === 0 && (
                 <div className="text-center text-blue-600">You have not accepted any missions yet.</div>

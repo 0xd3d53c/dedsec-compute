@@ -1,0 +1,47 @@
+name: Database Maintenance
+
+on:
+  schedule:
+    # Run daily at 1 AM UTC (adjust timezone as needed)
+    - cron: '0 1 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Run Database Maintenance
+        run: |
+          # Update leaderboards and cleanup old data
+          curl -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/scheduled_maintenance" \
+               -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+               -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+               -H "Content-Type: application/json" \
+               -H "Prefer: return=minimal"
+          
+          echo "Database maintenance completed successfully"
+        
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+
+  # Optional: Add a job to check maintenance health
+  health-check:
+    runs-on: ubuntu-latest
+    needs: maintenance
+    
+    steps:
+      - name: Check Maintenance Health
+        run: |
+          # Check if leaderboard cache was updated recently
+          curl -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/cron_job_health" \
+               -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+               -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+               -H "Accept: application/json" | jq '.'
+          
+          echo "Health check completed"
+        
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}

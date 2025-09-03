@@ -22,10 +22,13 @@ import {
   Pause,
   Eye,
   Share2,
+  TrendingUp,
 } from "lucide-react"
 import { HardwareMonitor, type ResourceLimits, type RealTimeStats } from "@/lib/hardware-detection"
 import { BackgroundWorker } from "@/lib/background-worker"
-import { detectCompromise } from "@/lib/security"
+import { detectCompromise, logCompromiseEvent, logSecurityEvent } from "@/lib/security"
+import { taskAnalytics } from "@/lib/task-analytics"
+import HistoricalMetrics from "@/components/historical-metrics"
 import QRCode from "qrcode"
 
 export default function Dashboard() {
@@ -37,6 +40,7 @@ export default function Dashboard() {
   const [networkStats, setNetworkStats] = useState<any>(null)
   const [operations, setOperations] = useState<any[]>([])
   const [myMissions, setMyMissions] = useState<any[]>([])
+  const [taskSummary, setTaskSummary] = useState<any>(null)
   const [isContributing, setIsContributing] = useState(false)
   const [cpuPercent, setCpuPercent] = useState([25])
   const [memoryMB, setMemoryMB] = useState([512])
@@ -85,11 +89,18 @@ export default function Dashboard() {
       loadMyMissions(user.id)
       prepareInvite(user.id)
       loadConsent(user.id)
+      loadTaskAnalytics(user.id)
 
       // Block contribution if compromised
       const compromise = detectCompromise()
       if (compromise.isSuspected) {
         setIsContributing(false)
+        
+        // Log compromise detection
+        await logCompromiseEvent(user.id, compromise, {
+          dashboardAccess: true,
+          contributionBlocked: true
+        })
       }
     }
     checkAuth()
@@ -195,6 +206,27 @@ export default function Dashboard() {
 
     setNetworkStats(stats)
     setOperations(ops || [])
+  }
+
+  const loadTaskAnalytics = async (userId: string) => {
+    try {
+      // Load user task summary
+      const summaryResult = await taskAnalytics.getDashboardTaskSummary(userId)
+      if (summaryResult.success) {
+        setTaskSummary(summaryResult.summary)
+      }
+
+      // Load network task stats
+      const networkResult = await taskAnalytics.getNetworkTaskStats()
+      if (networkResult.success) {
+        setNetworkStats((prev: any) => ({
+          ...(prev || {}),
+          taskStats: networkResult.stats
+        }))
+      }
+    } catch (error) {
+      console.error("Failed to load task analytics:", error)
+    }
   }
 
   const loadConsent = async (userId: string) => {
@@ -325,6 +357,21 @@ export default function Dashboard() {
     if (sessionRecord) {
       const supabase = createClient()
       await supabase.from("user_sessions").update({ is_contributing: newState }).eq("id", sessionRecord.id)
+    }
+
+    // Log contribution state change
+    if (user) {
+      await logSecurityEvent(
+        user.id,
+        'contribution_toggle',
+        'low',
+        `User ${newState ? 'started' : 'stopped'} contributing to the network`,
+        {
+          newState,
+          sessionId: sessionRecord?.id,
+          timestamp: new Date().toISOString()
+        }
+      )
     }
 
     // Start/stop background worker based on consent and toggle
@@ -486,7 +533,7 @@ export default function Dashboard() {
 
         {/* Main Tabs */}
         <Tabs defaultValue="monitor" className="space-y-4 sm:space-y-6">
-          <TabsList className="bg-slate-950 border border-blue-400 w-full grid grid-cols-4 h-auto p-1">
+          <TabsList className="bg-slate-950 border border-blue-400 w-full grid grid-cols-5 h-auto p-1">
             <TabsTrigger
               value="monitor"
               className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs sm:text-sm py-2 px-1 sm:px-3"
@@ -507,6 +554,13 @@ export default function Dashboard() {
             >
               <Zap className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
               <span className="hidden sm:inline">Missions</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="analytics"
+              className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs sm:text-sm py-2 px-1 sm:px-3"
+            >
+              <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Analytics</span>
             </TabsTrigger>
             <TabsTrigger
               value="settings"
@@ -725,6 +779,10 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="analytics">
+            <HistoricalMetrics userId={user?.id} isAdmin={userProfile?.is_admin} />
           </TabsContent>
 
           <TabsContent value="settings">

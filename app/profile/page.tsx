@@ -12,6 +12,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { User, Shield, Key, Smartphone, Save, Upload, Copy, CheckCircle, AlertTriangle } from "lucide-react"
 import { authManager } from "@/lib/auth-utils"
+import { 
+  validateProfilePictureFile, 
+  uploadProfilePicture, 
+  updateUserProfilePicture,
+  getAvatarFallback 
+} from "@/lib/profile-utils"
+import { sanitizeUsername, sanitizeText } from "@/lib/security-utils"
 
 interface UserProfile {
   id: string
@@ -95,66 +102,35 @@ export default function ProfilePage() {
     }
   }
 
-  const validateImageFile = (file: File): string | null => {
-    // Check file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png']
-    if (!allowedTypes.includes(file.type)) {
-      return "Only JPG and PNG files are allowed"
-    }
-
-    // Check file size (4MB = 4 * 1024 * 1024 bytes)
-    const maxSize = 4 * 1024 * 1024
-    if (file.size > maxSize) {
-      return "File size must be less than 4MB"
-    }
-
-    return null
-  }
+  // File validation is now handled by the shared utility
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
-    const validationError = validateImageFile(file)
-    if (validationError) {
-      setMessage({ type: "error", text: validationError })
-      return
-    }
-
     if (!profile) return
 
     setIsSaving(true)
     try {
-      const fileExt = file.name.split(".").pop()
-      const fileName = `${profile.id}/${Date.now()}.${fileExt}`
+      // Upload profile picture using shared utility
+      const uploadResult = await uploadProfilePicture(profile.id, file)
+      
+      if (!uploadResult.success) {
+        setMessage({ type: "error", text: uploadResult.error || "Upload failed" })
+        return
+      }
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("profile-pictures")
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: true
-        })
+      // Update database with new URL
+      const updateResult = await updateUserProfilePicture(profile.id, uploadResult.url!)
+      
+      if (!updateResult.success) {
+        setMessage({ type: "error", text: updateResult.error || "Database update failed" })
+        return
+      }
 
-      if (uploadError) throw uploadError
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("profile-pictures").getPublicUrl(fileName)
-
-      // Update profile picture URL in database
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({
-          profile_picture_url: publicUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", profile.id)
-
-      if (updateError) throw updateError
-
-      setProfilePictureUrl(publicUrl)
+      // Update local state immediately (no need to reload from database)
+      setProfilePictureUrl(uploadResult.url!)
       setMessage({ type: "success", text: "Profile picture updated successfully!" })
-      await loadProfile(profile.id)
     } catch (error) {
       console.error("Failed to upload profile picture:", error)
       setMessage({ type: "error", text: "Failed to upload profile picture" })
@@ -167,18 +143,27 @@ export default function ProfilePage() {
 
     setIsSaving(true)
     try {
+      // Sanitize user input
+      const sanitizedUsername = sanitizeUsername(username)
+
       const { error } = await supabase
         .from("users")
         .update({
-          username: username,
+          username: sanitizedUsername.sanitized,
           updated_at: new Date().toISOString(),
         })
         .eq("id", profile.id)
 
       if (error) throw error
 
+      // Update local state with sanitized values
+      setUsername(sanitizedUsername.sanitized)
+      setProfile(prev => prev ? {
+        ...prev,
+        username: sanitizedUsername.sanitized
+      } : null)
+
       setMessage({ type: "success", text: "Profile updated successfully!" })
-      await loadProfile(profile.id)
     } catch (error) {
       console.error("[v0] Failed to update profile:", error)
       setMessage({ type: "error", text: "Failed to update profile" })
@@ -345,7 +330,7 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-6">
                   <Avatar className="w-24 h-24">
                     <AvatarImage src={profilePictureUrl || "/placeholder.svg"} />
-                    <AvatarFallback className="text-2xl">{profile?.username?.charAt(0).toUpperCase()}</AvatarFallback>
+                    <AvatarFallback className="text-2xl">{getAvatarFallback(profile?.username)}</AvatarFallback>
                   </Avatar>
                   <div className="space-y-2">
                     <Label htmlFor="picture" className="text-cyan-400">

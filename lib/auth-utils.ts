@@ -1,4 +1,5 @@
 import { createClient } from "./supabase/client"
+import { getSessionManager } from "./session-manager"
 import * as speakeasy from 'speakeasy'
 import * as QRCode from 'qrcode'
 
@@ -20,6 +21,7 @@ export interface AuthResponse {
 
 export class AuthManager {
   private supabase = createClient()
+  private sessionManager = getSessionManager()
 
   async signInWithEmail(email: string, password: string): Promise<AuthResponse> {
     try {
@@ -158,15 +160,14 @@ export class AuthManager {
 
   async getCurrentUser(): Promise<AuthResponse> {
     try {
-      const { data: { user }, error } = await this.supabase.auth.getUser()
+      // Use session manager for validated session
+      const sessionState = this.sessionManager.getState()
       
-      if (error) {
-        return { success: false, error: error.message }
+      if (!sessionState.isValid || !sessionState.user) {
+        return { success: false, error: "No valid session found" }
       }
 
-      if (!user) {
-        return { success: false, error: "No user found" }
-      }
+      const user = sessionState.user
 
       // Fetch additional user data
       const { data: userData, error: userError } = await this.supabase
@@ -192,6 +193,27 @@ export class AuthManager {
       }
     } catch (error) {
       return { success: false, error: "Failed to get current user" }
+    }
+  }
+
+  async validateSession(): Promise<{ isValid: boolean; error?: string }> {
+    try {
+      const sessionState = this.sessionManager.getState()
+      
+      if (sessionState.isLoading) {
+        return { isValid: false, error: "Session validation in progress" }
+      }
+
+      if (!sessionState.isValid) {
+        return { isValid: false, error: sessionState.error || "Invalid session" }
+      }
+
+      return { isValid: true }
+    } catch (error) {
+      return { 
+        isValid: false, 
+        error: error instanceof Error ? error.message : "Session validation failed" 
+      }
     }
   }
 

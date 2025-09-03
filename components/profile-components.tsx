@@ -17,6 +17,12 @@ import {
 } from "@/components/ui/dialog"
 import { User, Camera, Shield, Key, Save } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { 
+  validateProfilePictureFile, 
+  uploadProfilePicture, 
+  updateUserProfilePicture,
+  getAvatarFallback 
+} from "@/lib/profile-utils"
 
 interface QuickProfileProps {
   user: {
@@ -44,25 +50,20 @@ export function QuickProfileCard({ user, onProfileUpdate }: QuickProfileProps) {
 
       // Upload profile picture if selected
       if (profilePicture) {
-        const fileExt = profilePicture.name.split(".").pop()
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`
-
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("profile-pictures")
-          .upload(fileName, profilePicture)
-
-        if (!uploadError) {
-          const {
-            data: { publicUrl },
-          } = supabase.storage.from("profile-pictures").getPublicUrl(fileName)
-          uploadedImageUrl = publicUrl
+        const uploadResult = await uploadProfilePicture(user.id, profilePicture)
+        
+        if (uploadResult.success) {
+          uploadedImageUrl = uploadResult.url!
+        } else {
+          console.error("Profile picture upload failed:", uploadResult.error)
+          // Continue with update even if image upload fails
         }
       }
 
       const { error } = await supabase
         .from("users")
         .update({
-          display_name: displayName,
+          username: displayName, // Use username instead of display_name since display_name was removed
           profile_picture_url: uploadedImageUrl,
           updated_at: new Date().toISOString(),
         })
@@ -90,10 +91,10 @@ export function QuickProfileCard({ user, onProfileUpdate }: QuickProfileProps) {
         <div className="flex items-center gap-4">
           <Avatar className="w-16 h-16">
             <AvatarImage src={user.profile_picture_url || "/placeholder.svg"} />
-            <AvatarFallback className="text-lg">{user.username?.charAt(0).toUpperCase()}</AvatarFallback>
+            <AvatarFallback className="text-lg">{getAvatarFallback(user.username)}</AvatarFallback>
           </Avatar>
           <div className="flex-1">
-            <h3 className="font-medium text-cyan-400">{user.display_name}</h3>
+            <h3 className="font-medium text-cyan-400">{user.username}</h3>
             <p className="text-sm text-cyan-300">@{user.username}</p>
             <div className="flex items-center gap-2 mt-1">
               <Badge className={user.two_factor_enabled ? "bg-emerald-600" : "bg-slate-600"}>
@@ -118,11 +119,11 @@ export function QuickProfileCard({ user, onProfileUpdate }: QuickProfileProps) {
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="display_name" className="text-cyan-400">
-                  Display Name
+                <Label htmlFor="username" className="text-cyan-400">
+                  Username
                 </Label>
                 <Input
-                  id="display_name"
+                  id="username"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   className="bg-slate-950 border-cyan-400 text-cyan-400"

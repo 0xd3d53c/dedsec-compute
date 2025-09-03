@@ -5,43 +5,61 @@ import { useRouter, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Shield, LogOut, Settings, User, Menu, X } from "lucide-react"
+import { getAvatarFallback } from "@/lib/profile-utils"
+import { useSession } from "@/hooks/useSession"
 
 export default function Header() {
   const router = useRouter()
   const pathname = usePathname()
-  const [user, setUser] = useState<any>(null)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const { user, isValid, isLoading, signOut } = useSession()
+  const supabase = createClient()
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (user) {
-        setUser(user)
-        // Load user profile
+    const loadUserProfile = async () => {
+      if (user && isValid) {
         const { data: profile } = await supabase
           .from("users")
           .select("*")
           .eq("id", user.id)
           .single()
         setUserProfile(profile)
+      } else {
+        setUserProfile(null)
       }
     }
-    checkAuth()
-  }, [])
+    loadUserProfile()
+  }, [user, isValid])
 
   const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push("/")
+    const result = await signOut()
+    if (!result.error) {
+      router.push("/")
+    }
   }
 
   const isAuthPage = pathname.startsWith("/auth")
   const isPublicPage = pathname === "/" || isAuthPage
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <header className="bg-slate-950/90 border-b border-blue-400/30 sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4 max-w-7xl">
+          <div className="flex items-center justify-between">
+            <div className="h-8 w-8 bg-slate-700 rounded animate-pulse"></div>
+          </div>
+        </div>
+      </header>
+    )
+  }
+
+  // Redirect to login if not authenticated and not on public page
+  if (!isPublicPage && (!user || !isValid)) {
+    router.push("/auth/login")
+    return null
+  }
 
   if (isPublicPage) {
     return (
@@ -123,8 +141,8 @@ export default function Header() {
                       className="w-8 h-8 rounded-full object-cover border border-blue-400/50"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
-                      <User className="w-4 h-4 text-white" />
+                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+                      {getAvatarFallback(userProfile?.username)}
                     </div>
                   )}
                   <div>
