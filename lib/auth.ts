@@ -4,12 +4,9 @@ import { createClient as createServerClient } from "@/lib/supabase/server"
 export interface AuthUser {
   id: string
   email?: string
-  phone?: string
   user_metadata: {
     username?: string
     display_name?: string
-    phone?: string
-    country_code?: string
   }
 }
 
@@ -17,8 +14,6 @@ export interface UserProfile {
   id: string
   username: string
   display_name: string
-  phone?: string
-  country_code?: string
   profile_picture_url?: string
   invite_code: string
   invited_by?: string
@@ -30,34 +25,6 @@ export interface UserProfile {
   updated_at: string
 }
 
-export async function signInWithPhone(phone: string, countryCode: string) {
-  const supabase = createClient()
-  const fullPhone = `${countryCode}${phone}`
-
-  const { data, error } = await supabase.auth.signInWithOtp({
-    phone: fullPhone,
-    options: {
-      data: {
-        phone: fullPhone,
-        country_code: countryCode,
-      },
-    },
-  })
-
-  return { data, error }
-}
-
-export async function verifyOtp(phone: string, token: string) {
-  const supabase = createClient()
-
-  const { data, error } = await supabase.auth.verifyOtp({
-    phone,
-    token,
-    type: "sms",
-  })
-
-  return { data, error }
-}
 
 export async function signInWithGoogle() {
   const supabase = createClient()

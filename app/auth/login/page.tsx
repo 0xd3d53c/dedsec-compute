@@ -68,7 +68,11 @@ export default function LoginPage() {
       }
     } catch (error: any) {
       console.error("Login error:", error)
-      setError(error.message || "Authentication failed")
+      if (error?.message?.toLowerCase().includes("email not confirmed")) {
+        setError("Email not confirmed. Check your inbox or resend confirmation.")
+      } else {
+        setError(error.message || "Authentication failed")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -194,6 +198,21 @@ export default function LoginPage() {
               <div className="text-red-400 text-sm text-center p-3 border border-red-400 rounded flex items-center gap-2 justify-center">
                 <AlertTriangle className="w-4 h-4" />
                 {error}
+              </div>
+            )}
+
+            {error?.toLowerCase().includes("email not confirmed") && (
+              <div className="text-center mt-2">
+                <Button
+                  variant="outline"
+                  className="border-blue-400 text-blue-400 hover:bg-blue-400 hover:text-white"
+                  onClick={async () => {
+                    const supabase = createClient()
+                    await supabase.auth.resend({ type: "signup", email: email.trim().toLowerCase() })
+                  }}
+                >
+                  Resend confirmation email
+                </Button>
               </div>
             )}
 

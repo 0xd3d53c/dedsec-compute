@@ -12,6 +12,7 @@ export interface ComputeTask {
 }
 
 export interface TaskResult {
+  compute_time_ms: any
   task_id: string
   result_data: any
   computation_time: number
@@ -20,6 +21,18 @@ export interface TaskResult {
 }
 
 export class ComputeEngine {
+  getStatus() {
+    throw new Error("Method not implemented.")
+  }
+  onError(arg0: (error: Error) => Promise<void>) {
+    throw new Error("Method not implemented.")
+  }
+  onComplete(arg0: (result: TaskResult) => Promise<void>) {
+    throw new Error("Method not implemented.")
+  }
+  onProgress(arg0: (progress: any) => Promise<void>) {
+    throw new Error("Method not implemented.")
+  }
   private isRunning = false
   private currentTask: ComputeTask | null = null
   private progressCallback?: (progress: number, operations: number) => void
@@ -107,6 +120,7 @@ export class ComputeEngine {
       const proofOfWork = await this.generateProofOfWork(result, task)
 
       return {
+        compute_time_ms: computationTime,
         task_id: task.id,
         result_data: result,
         computation_time: computationTime,

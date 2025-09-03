@@ -20,7 +20,7 @@ BEGIN
   
   RETURN code;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function to handle new user creation
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -33,6 +33,7 @@ DECLARE
   username_val TEXT;
   display_name_val TEXT;
   email_val TEXT;
+  invite_code_val TEXT;
 BEGIN
   -- Extract values from user metadata or use defaults
   username_val := COALESCE(
@@ -50,12 +51,16 @@ BEGIN
     NEW.email
   );
   
+  -- Generate unique invite code
+  invite_code_val := public.generate_invite_code();
+  
   -- Ensure username is unique by appending a number if needed
   WHILE EXISTS (SELECT 1 FROM public.users WHERE username = username_val) LOOP
     username_val := username_val || '_' || floor(random() * 1000)::text;
   END LOOP;
   
   -- Insert new user with all required fields
+  -- Use ON CONFLICT DO NOTHING to avoid errors if user already exists
   INSERT INTO public.users (
     id, 
     username, 
@@ -72,17 +77,45 @@ BEGIN
     username_val,
     display_name_val,
     email_val,
-    public.generate_invite_code(),
+    invite_code_val,
     FALSE, -- Default to non-admin
     TRUE,  -- Default to active
     NOW(),
     NOW()
   )
-  ON CONFLICT (id) DO UPDATE SET
-    username = EXCLUDED.username,
-    display_name = EXCLUDED.display_name,
-    email = EXCLUDED.email,
-    updated_at = NOW();
+  ON CONFLICT (id) DO NOTHING;
+  
+  -- Also create a user_sessions record for the new user
+  INSERT INTO public.user_sessions (
+    user_id,
+    device_id,
+    hardware_specs,
+    is_contributing,
+    max_cpu_percent,
+    max_memory_mb,
+    only_when_charging,
+    only_when_idle,
+    last_active,
+    created_at
+  )
+  VALUES (
+    NEW.id,
+    'web_' || substr(NEW.id::text, 1, 8),
+    jsonb_build_object(
+      'cpu_cores', 1,
+      'total_memory_gb', 1.0,
+      'architecture', 'web',
+      'platform', 'browser'
+    ),
+    FALSE,
+    25,
+    512,
+    TRUE,
+    TRUE,
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (user_id) DO NOTHING;
   
   RETURN NEW;
 END;
@@ -132,3 +165,8 @@ BEGIN
   );
 END;
 $$;
+
+-- Grant necessary permissions
+GRANT EXECUTE ON FUNCTION public.generate_invite_code() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_network_metrics() TO authenticated;

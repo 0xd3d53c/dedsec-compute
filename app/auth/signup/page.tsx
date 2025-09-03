@@ -102,13 +102,13 @@ export default function SignUpPage() {
         console.log("User created successfully:", data.user.id)
         
         // Wait a moment for the database trigger to process
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await new Promise(resolve => setTimeout(resolve, 2000))
         
         // Check if profile was created successfully
         try {
           const { data: profile, error: profileError } = await supabase
             .from("users")
-            .select("username, display_name")
+            .select("username, display_name, is_active")
             .eq("id", data.user.id)
             .single()
 
@@ -116,13 +116,24 @@ export default function SignUpPage() {
             console.warn("Profile not found, redirecting to consent:", profileError)
             // Profile wasn't created by trigger, redirect to consent to create it manually
             router.push("/consent")
-          } else if (!profile?.username || !profile?.display_name) {
+            return
+          } 
+          
+          if (!profile?.username || !profile?.display_name) {
             console.log("Profile incomplete, redirecting to consent")
             router.push("/consent")
-          } else {
-            console.log("Profile complete, redirecting to dashboard")
-            router.push("/dashboard")
+            return
           }
+          
+          if (!profile?.is_active) {
+            console.log("Profile not active, redirecting to consent")
+            router.push("/consent")
+            return
+          }
+          
+          console.log("Profile complete, redirecting to dashboard")
+          router.push("/dashboard")
+          
         } catch (profileError: any) {
           console.warn("Profile check failed, redirecting to consent:", profileError)
           // Any error means profile isn't ready, redirect to consent
@@ -131,7 +142,17 @@ export default function SignUpPage() {
       }
     } catch (error: any) {
       console.error("Signup error:", error)
-      setError(error.message || "Failed to create account")
+      
+      // Provide more specific error messages
+      if (error.message?.includes("already registered")) {
+        setError("An account with this email already exists. Please sign in instead.")
+      } else if (error.message?.includes("password")) {
+        setError("Password requirements not met. Please check the requirements below.")
+      } else if (error.message?.includes("email")) {
+        setError("Please enter a valid email address.")
+      } else {
+        setError(error.message || "Failed to create account. Please try again.")
+      }
     } finally {
       setIsLoading(false)
     }

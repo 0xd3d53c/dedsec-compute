@@ -14,13 +14,17 @@ export async function middleware(request: NextRequest) {
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   
   // Content Security Policy for XSS protection
+  // Allow Next.js development features in dev mode
+  const isDev = process.env.NODE_ENV === 'development'
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    isDev 
+      ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net"
+      : "script-src 'self' https://cdn.jsdelivr.net",
+    "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: https:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co" + (isDev ? " ws://localhost:*" : ""),
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'"
@@ -32,19 +36,7 @@ export async function middleware(request: NextRequest) {
   const clientIP = request.ip || request.headers.get('x-forwarded-for') || 'unknown'
   response.headers.set('X-Client-IP', clientIP)
   
-  // Admin route protection
-  if (request.nextUrl.pathname.startsWith('/admin')) {
-    // Check if user is authenticated and has admin privileges
-    const supabaseResponse = await updateSession(request)
-    
-    if (supabaseResponse.status !== 200) {
-      // Redirect to login if not authenticated
-      return NextResponse.redirect(new URL('/auth/login', request.url))
-    }
-    
-    // Additional admin verification will be done in the admin pages
-    // This middleware provides the first layer of protection
-  }
+  // Admin route protection is handled by updateSession; no duplicate checks here
   
   return response
 }

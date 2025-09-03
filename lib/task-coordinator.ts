@@ -1,5 +1,5 @@
 import { createClient } from "./supabase/client"
-import { ComputeEngine, type ComputeTask, type TaskResult, type ComputeProgress } from "./compute-engine"
+import { ComputeEngine, type ComputeTask, type TaskResult } from "./compute-engine"
 
 export interface TaskQueue {
   pending_tasks: ComputeTask[]
@@ -18,11 +18,7 @@ export class TaskCoordinator {
   }
 
   constructor() {
-    this.computeEngine = new ComputeEngine(
-      (progress) => this.handleProgress(progress),
-      (result) => this.handleTaskComplete(result),
-      (error) => this.handleTaskError(error),
-    )
+    this.computeEngine = new ComputeEngine()
   }
 
   public async startCoordination(userId: string, deviceId: string): Promise<void> {
@@ -48,7 +44,7 @@ export class TaskCoordinator {
         await this.fetchAvailableTasks(userId)
 
         // Execute next task if available and not currently running
-        if (this.taskQueue.pending_tasks.length > 0 && !this.computeEngine.getStatus().isRunning) {
+        if (this.taskQueue.pending_tasks.length > 0 && !this.computeEngine.isCurrentlyRunning()) {
           const nextTask = this.taskQueue.pending_tasks.shift()
           if (nextTask) {
             await this.executeTask(nextTask, userId, deviceId)
@@ -67,7 +63,7 @@ export class TaskCoordinator {
   private async fetchAvailableTasks(userId: string): Promise<void> {
     try {
       // Get user's unlock threshold from their stats
-      const { data: userStats } = await this.supabase.from("users").select("*").eq("id", userId).single()
+      const { data: userStats } = await this.supabase.from("users").select("*").eq("id", userId).maybeSingle()
 
       if (!userStats) return
 
@@ -85,7 +81,7 @@ export class TaskCoordinator {
       }
 
       // Convert operations to compute tasks
-      const newTasks: ComputeTask[] = operations.map((op) => ({
+      const newTasks: ComputeTask[] = (operations || []).map((op: any) => ({
         id: crypto.randomUUID(),
         operation_id: op.id,
         type: this.mapOperationType(op.name),
@@ -148,8 +144,10 @@ export class TaskCoordinator {
     }
 
     try {
-      // Execute the task
-      const result = await this.computeEngine.executeTask(task)
+      // Execute the task with progress callback
+      const result = await this.computeEngine.executeTask(task, async (progress: number, operations: number) => {
+        await this.handleProgress(task, progress, operations)
+      })
 
       // Update task execution with results
       await this.supabase
@@ -157,7 +155,7 @@ export class TaskCoordinator {
         .update({
           result_data: result.result_data,
           status: "completed",
-          compute_time_ms: result.compute_time_ms,
+          compute_time_ms: result.computation_time,
           completed_at: new Date().toISOString(),
         })
         .eq("id", execution.id)
@@ -182,15 +180,16 @@ export class TaskCoordinator {
     }
   }
 
-  private async handleProgress(progress: ComputeProgress): Promise<void> {
-    console.log(`[v0] Task progress: ${progress.progress_percent.toFixed(1)}% - ${progress.current_operation}`)
+  private async handleProgress(task: ComputeTask, progress: number, operations: number): Promise<void> {
+    const percent = Math.min(Math.max(progress * 100, 0), 100)
+    console.log(`[v0] Task progress: ${percent.toFixed(1)}% - operations: ${operations} - type: ${task.type}`)
 
     // Update network metrics with current progress
-    await this.updateNetworkMetrics(progress)
+    await this.updateNetworkMetrics(operations, percent)
   }
 
   private async handleTaskComplete(result: TaskResult): Promise<void> {
-    console.log(`[v0] Task completed: ${result.task_id}, operations: ${result.operations_completed}`)
+    console.log(`[v0] Task completed: ${result.task_id}`)
 
     // Update user statistics
     await this.updateUserStats(result)
@@ -200,18 +199,15 @@ export class TaskCoordinator {
     console.error("[v0] Task execution error:", error)
   }
 
-  private async updateNetworkMetrics(progress: ComputeProgress): Promise<void> {
+  private async updateNetworkMetrics(operationsCompleted: number, progressPercent: number): Promise<void> {
     try {
-      // Calculate current operations per second
-      const opsPerSecond = progress.operations_completed / ((Date.now() - new Date(progress.task_id).getTime()) / 1000)
-
       await this.supabase.from("network_metrics").insert({
-        active_users: 1, // This would be calculated differently in production
-        total_cpu_cores: navigator.hardwareConcurrency || 4,
-        total_memory_gb: (navigator as any).deviceMemory || 4,
-        operations_per_second: opsPerSecond,
-        network_efficiency: progress.progress_percent,
-        average_latency_ms: 50, // Placeholder
+        active_users: 1,
+        total_cpu_cores: typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency || 4) : 4,
+        total_memory_gb: typeof navigator !== 'undefined' ? ((navigator as any).deviceMemory || 4) : 4,
+        operations_per_second: operationsCompleted,
+        network_efficiency: progressPercent,
+        average_latency_ms: 50,
       })
     } catch (error) {
       console.error("[v0] Error updating network metrics:", error)
@@ -221,7 +217,7 @@ export class TaskCoordinator {
   private async updateUserStats(result: TaskResult): Promise<void> {
     try {
       // This would update user statistics and achievements
-      console.log(`[v0] Updating user stats for task completion: ${result.operations_completed} operations`)
+      console.log(`[v0] Updating user stats for task completion: ${result.task_id}, time: ${result.computation_time}ms`)
     } catch (error) {
       console.error("[v0] Error updating user stats:", error)
     }

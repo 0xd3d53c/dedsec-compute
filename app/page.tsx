@@ -161,15 +161,6 @@ export default function HomePage() {
             </Link>
           </div>
 
-          {/* Admin Access */}
-          <div className="text-center mb-8">
-            <Link
-              href="/admin"
-              className="text-orange-400 hover:text-orange-300 text-xs sm:text-sm underline opacity-50 hover:opacity-100 transition-opacity"
-            >
-              Admin Access
-            </Link>
-          </div>
         </div>
 
         {/* Enhanced Footer */}

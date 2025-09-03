@@ -26,6 +26,7 @@ export class BackgroundWorker {
       only_when_charging: true,
       only_when_idle: false,
       temperature_threshold: 75,
+      max_battery_drain_percent: 10,
     }
 
     this.resourceManager = new ResourceManager(defaultLimits)

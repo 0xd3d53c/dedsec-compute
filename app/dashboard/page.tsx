@@ -29,7 +29,7 @@ export default function Dashboard() {
   const router = useRouter()
 
   const [user, setUser] = useState<any>(null)
-  const [follower, setFollower] = useState<any>(null)
+  const [sessionRecord, setSessionRecord] = useState<any>(null)
   const [networkStats, setNetworkStats] = useState<any>(null)
   const [operations, setOperations] = useState<any[]>([])
   const [isContributing, setIsContributing] = useState(false)
@@ -74,22 +74,33 @@ export default function Dashboard() {
   const loadUserData = async (userId: string) => {
     const supabase = createClient()
 
-    const { data: followerData } = await supabase.from("followers").select("*").eq("user_id", userId).single()
+    const { data: userSession } = await supabase
+      .from("user_sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-    if (followerData) {
-      setFollower(followerData)
-      setIsContributing(followerData.is_contributing)
-      setCpuPercent([followerData.max_cpu_percent])
-      setMemoryMB([followerData.max_memory_mb])
-      setOnlyWhenCharging(followerData.only_when_charging)
-      setOnlyWhenIdle(followerData.only_when_idle)
+    if (userSession) {
+      setSessionRecord(userSession)
+      setIsContributing(userSession.is_contributing)
+      setCpuPercent([userSession.max_cpu_percent])
+      setMemoryMB([userSession.max_memory_mb])
+      setOnlyWhenCharging(userSession.only_when_charging)
+      setOnlyWhenIdle(userSession.only_when_idle)
     }
   }
 
   const loadNetworkData = async () => {
     const supabase = createClient()
 
-    const { data: stats } = await supabase.from("network_metrics").select("*").order("created_at", { ascending: false }).limit(1).single()
+    const { data: stats } = await supabase
+      .from("network_metrics")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
     const { data: ops } = await supabase.from("operations").select("*").eq("is_active", true)
 
     setNetworkStats(stats)
@@ -110,24 +121,24 @@ export default function Dashboard() {
     const newState = !isContributing
     setIsContributing(newState)
 
-    if (follower) {
+    if (sessionRecord) {
       const supabase = createClient()
-      await supabase.from("followers").update({ is_contributing: newState }).eq("id", follower.id)
+      await supabase.from("user_sessions").update({ is_contributing: newState }).eq("id", sessionRecord.id)
     }
   }
 
   const updateSettings = async () => {
-    if (follower) {
+    if (sessionRecord) {
       const supabase = createClient()
       await supabase
-        .from("followers")
+        .from("user_sessions")
         .update({
           max_cpu_percent: cpuPercent[0],
           max_memory_mb: memoryMB[0],
           only_when_charging: onlyWhenCharging,
           only_when_idle: onlyWhenIdle,
         })
-        .eq("id", follower.id)
+        .eq("id", sessionRecord.id)
     }
   }
 
@@ -138,7 +149,7 @@ export default function Dashboard() {
   }
 
   const generateInviteCode = () => {
-    return follower?.user_id ? `d3d_${follower.user_id.slice(0, 8).toUpperCase()}` : "d3d_LOADING"
+    return sessionRecord?.user_id ? `d3d_${sessionRecord.user_id.slice(0, 8).toUpperCase()}` : "d3d_LOADING"
   }
 
   if (!user) {
@@ -189,7 +200,7 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <div className="text-lg sm:text-2xl font-bold text-blue-400">{networkStats?.active_followers || 0}</div>
+              <div className="text-lg sm:text-2xl font-bold text-blue-400">{networkStats?.active_users || 0}</div>
               <p className="text-xs text-cyan-300">Contributing now</p>
             </CardContent>
           </Card>
@@ -337,10 +348,10 @@ export default function Dashboard() {
                     <div className="flex justify-between text-sm mb-2">
                       <span className="text-cyan-300">Overall Efficiency</span>
                       <span className="text-blue-400">
-                        {networkStats?.current_compute_power
+                        {networkStats?.operations_per_second
                           ? Math.min(
                               100,
-                              Math.floor((networkStats.current_compute_power / networkStats.total_cpu_cores) * 100),
+                              Math.floor(((networkStats.operations_per_second || 0) / (networkStats.total_cpu_cores || 1)) * 100),
                             )
                           : 0}
                         %
@@ -351,10 +362,10 @@ export default function Dashboard() {
                         className="bg-blue-400 h-2 rounded-full transition-all duration-1000"
                         style={{
                           width: `${
-                            networkStats?.current_compute_power
+                            networkStats?.operations_per_second
                               ? Math.min(
                                   100,
-                                  Math.floor((networkStats.current_compute_power / networkStats.total_cpu_cores) * 100),
+                                  Math.floor(((networkStats.operations_per_second || 0) / (networkStats.total_cpu_cores || 1)) * 100),
                                 )
                               : 0
                           }%`,
@@ -393,7 +404,7 @@ export default function Dashboard() {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-cyan-300">Compute Hours:</span>
-                        <span className="text-blue-400">{follower?.total_compute_hours || 0}</span>
+                        <span className="text-blue-400">{sessionRecord?.total_compute_hours || 0}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-cyan-300">Rank:</span>
