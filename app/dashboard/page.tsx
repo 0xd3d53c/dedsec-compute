@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,6 +24,10 @@ import {
   Eye,
   Share2,
 } from "lucide-react"
+import { HardwareMonitor, type ResourceLimits, type RealTimeStats } from "@/lib/hardware-detection"
+import { BackgroundWorker } from "@/lib/background-worker"
+import { detectCompromise } from "@/lib/security"
+import QRCode from "qrcode"
 
 export default function Dashboard() {
   const router = useRouter()
@@ -44,6 +48,22 @@ export default function Dashboard() {
     batteryLevel: 100,
     isCharging: true,
   })
+  const [deviceInfo, setDeviceInfo] = useState<{ cpu_cores: number; total_memory_gb: number } | null>(null)
+
+  const [consentGranted, setConsentGranted] = useState<boolean>(false)
+
+  const [socialStats, setSocialStats] = useState({
+    computeHours: 0,
+    rank: "-",
+    followers: 0,
+  })
+
+  const [inviteCode, setInviteCode] = useState<string>("")
+  const [shareLink, setShareLink] = useState<string>("")
+  const [qrDataUrl, setQrDataUrl] = useState<string>("")
+
+  const monitorRef = useRef<HardwareMonitor | null>(null)
+  const workerRef = useRef<BackgroundWorker | null>(null)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -59,16 +79,67 @@ export default function Dashboard() {
 
       setUser(user)
       loadUserData(user.id)
+      loadSocialData(user.id)
+      prepareInvite(user.id)
+      loadConsent(user.id)
+
+      // Block contribution if compromised
+      const compromise = detectCompromise()
+      if (compromise.isSuspected) {
+        setIsContributing(false)
+      }
     }
     checkAuth()
 
     loadNetworkData()
+
+    // Initialize hardware monitor for live stats
+    const limits: ResourceLimits = {
+      max_cpu_percent: 100,
+      max_memory_mb: 16384,
+      only_when_charging: false,
+      only_when_idle: false,
+      temperature_threshold: 85,
+      max_battery_drain_percent: 100,
+    }
+    const monitor = new HardwareMonitor(limits)
+    monitor.onStatsUpdate((stats: RealTimeStats) => {
+      setRealTimeStats({
+        cpuUsage: Math.round(stats.cpu_usage),
+        memoryUsage: Math.round(stats.memory_usage),
+        temperature: Math.round(stats.temperature || 0),
+        batteryLevel: Math.round(stats.battery_level || 0),
+        isCharging: !!stats.is_charging,
+      })
+    })
+    monitor.startMonitoring(2000)
+    monitorRef.current = monitor
+
+    // Capture stable device info once
+    monitor.detectEnhancedHardware().then((info) => {
+      setDeviceInfo({ cpu_cores: info.cpu_cores, total_memory_gb: info.total_memory_gb })
+    })
+
     const interval = setInterval(() => {
       loadNetworkData()
-      updateRealTimeStats()
-    }, 2000)
+    }, 20000)
 
-    return () => clearInterval(interval)
+    // realtime subscriptions
+    const supabase = createClient()
+    const channel = supabase
+      .channel("dashboard_rt")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "network_metrics" }, () => loadNetworkData())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "user_sessions" }, (payload) => {
+        if (user && payload.new && payload.new.user_id === user.id) loadUserData(user.id)
+      })
+      .subscribe()
+
+    return () => {
+      clearInterval(interval)
+      channel.unsubscribe()
+      monitorRef.current?.stopMonitoring()
+      monitorRef.current = null
+    }
   }, [router])
 
   const loadUserData = async (userId: string) => {
@@ -107,14 +178,98 @@ export default function Dashboard() {
     setOperations(ops || [])
   }
 
-  const updateRealTimeStats = () => {
-    setRealTimeStats({
-      cpuUsage: Math.floor(Math.random() * (isContributing ? cpuPercent[0] : 10)),
-      memoryUsage: Math.floor(Math.random() * (isContributing ? memoryMB[0] : 100)),
-      temperature: Math.floor(Math.random() * 20) + 35,
-      batteryLevel: Math.floor(Math.random() * 100),
-      isCharging: Math.random() > 0.3,
+  const loadConsent = async (userId: string) => {
+    const supabase = createClient()
+    const { data } = await supabase
+      .from("user_consents")
+      .select("granted, revoked_at")
+      .eq("user_id", userId)
+      .eq("consent_type", "distributed_compute")
+      .order("granted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    setConsentGranted(!!(data && data.granted && !data.revoked_at))
+  }
+
+  const loadSocialData = async (userId: string) => {
+    const supabase = createClient()
+
+    // Compute hours from task_executions compute_time_ms
+    const { data: tasks } = await supabase
+      .from("task_executions")
+      .select("compute_time_ms, user_id, status")
+    const myCompleted = (tasks || []).filter((t: any) => t.user_id === userId && t.status === "completed")
+    const myMs = myCompleted.reduce((acc: number, t: any) => acc + (t.compute_time_ms || 0), 0)
+    const computeHours = Math.round((myMs / (1000 * 60 * 60)) * 100) / 100
+
+    // Rank by number of completed tasks (client-side aggregation)
+    const counts: Record<string, number> = {}
+    ;(tasks || []).forEach((t: any) => {
+      if (t.status === "completed") counts[t.user_id] = (counts[t.user_id] || 0) + 1
     })
+    const sorted = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([uid]) => uid)
+    const rankIndex = sorted.indexOf(userId)
+    const rank = rankIndex >= 0 ? `#${rankIndex + 1}` : "-"
+
+    // Followers count
+    const { count: followers } = await supabase
+      .from("followers")
+      .select("*", { count: "exact", head: true })
+      .eq("following_id", userId)
+
+    setSocialStats({ computeHours, rank, followers: followers || 0 })
+  }
+
+  const prepareInvite = async (userId: string) => {
+    const supabase = createClient()
+    // Find an active code or create one
+    const { data: existing } = await supabase
+      .from("invite_codes")
+      .select("code, is_active, expires_at")
+      .eq("created_by", userId)
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle()
+
+    let code = existing?.code
+    if (!code) {
+      const newCode = `d3d_${userId.slice(0, 6)}_${Math.random().toString(36).slice(2, 6)}`.toUpperCase()
+      const { data: created, error } = await supabase
+        .from("invite_codes")
+        .insert({ code: newCode, created_by: userId, max_uses: 10, is_active: true })
+        .select("code")
+        .single()
+      if (!error) code = created.code
+    }
+
+    if (code) {
+      const link = `${window.location.origin}/auth/signup?invite=${encodeURIComponent(code)}`
+      setInviteCode(code)
+      setShareLink(link)
+      try {
+        const dataUrl = await QRCode.toDataURL(link, { margin: 1, width: 180 })
+        setQrDataUrl(dataUrl)
+      } catch {
+        setQrDataUrl("")
+      }
+    }
+  }
+
+  const onShareInvite = async () => {
+    if (!shareLink) return
+    const text = `Join DedSecCompute with my invite code: ${inviteCode}`
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "DedSecCompute", text, url: shareLink })
+        return
+      } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(shareLink)
+      alert("Invite link copied to clipboard")
+    } catch {}
   }
 
   const toggleContribution = async () => {
@@ -124,6 +279,45 @@ export default function Dashboard() {
     if (sessionRecord) {
       const supabase = createClient()
       await supabase.from("user_sessions").update({ is_contributing: newState }).eq("id", sessionRecord.id)
+    }
+
+    // Start/stop background worker based on consent and toggle
+    if (newState && consentGranted && user) {
+      if (!workerRef.current) {
+        workerRef.current = new BackgroundWorker(user.id)
+      }
+      await workerRef.current.start()
+    } else {
+      if (workerRef.current) {
+        await workerRef.current.stop()
+        workerRef.current = null
+      }
+    }
+  }
+
+  const toggleConsent = async () => {
+    if (!user) return
+    const supabase = createClient()
+    const newGranted = !consentGranted
+    const version = "v1.0"
+    if (newGranted) {
+      await supabase
+        .from("user_consents")
+        .insert({ user_id: user.id, consent_type: "distributed_compute", granted: true, version })
+    } else {
+      await supabase
+        .from("user_consents")
+        .insert({ user_id: user.id, consent_type: "distributed_compute", granted: false, version, revoked_at: new Date().toISOString() })
+    }
+    setConsentGranted(newGranted)
+    // If consent revoked, stop worker
+    if (!newGranted && workerRef.current) {
+      await workerRef.current.stop()
+      workerRef.current = null
+      setIsContributing(false)
+      if (sessionRecord) {
+        await supabase.from("user_sessions").update({ is_contributing: false }).eq("id", sessionRecord.id)
+      }
     }
   }
 
@@ -140,6 +334,15 @@ export default function Dashboard() {
         })
         .eq("id", sessionRecord.id)
     }
+    // Also update monitor limits locally
+    if (monitorRef.current) {
+      monitorRef.current.updateLimits({
+        max_cpu_percent: cpuPercent[0],
+        max_memory_mb: memoryMB[0],
+        only_when_charging: onlyWhenCharging,
+        only_when_idle: onlyWhenIdle,
+      })
+    }
   }
 
   const handleLogout = async () => {
@@ -149,7 +352,7 @@ export default function Dashboard() {
   }
 
   const generateInviteCode = () => {
-    return sessionRecord?.user_id ? `d3d_${sessionRecord.user_id.slice(0, 8).toUpperCase()}` : "d3d_LOADING"
+    return inviteCode || (sessionRecord?.user_id ? `d3d_${sessionRecord.user_id.slice(0, 8).toUpperCase()}` : "d3d_LOADING")
   }
 
   if (!user) {
@@ -209,13 +412,13 @@ export default function Dashboard() {
             <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
               <CardTitle className="text-blue-400 text-xs sm:text-sm flex items-center gap-1 sm:gap-2">
                 <Cpu className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Total CPU Cores</span>
+                <span className="hidden sm:inline">CPU Cores (Device)</span>
                 <span className="sm:hidden">CPU</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <div className="text-lg sm:text-2xl font-bold text-cyan-400">{networkStats?.total_cpu_cores || 0}</div>
-              <p className="text-xs text-cyan-300">Network capacity</p>
+              <div className="text-lg sm:text-2xl font-bold text-cyan-400">{deviceInfo?.cpu_cores ?? 0}</div>
+              <p className="text-xs text-cyan-300">Device capacity</p>
             </CardContent>
           </Card>
 
@@ -223,13 +426,13 @@ export default function Dashboard() {
             <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
               <CardTitle className="text-blue-400 text-xs sm:text-sm flex items-center gap-1 sm:gap-2">
                 <MemoryStick className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Total Memory</span>
+                <span className="hidden sm:inline">Total Memory (Device)</span>
                 <span className="sm:hidden">Memory</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               <div className="text-lg sm:text-2xl font-bold text-orange-400">
-                {networkStats?.total_memory_gb ? `${networkStats.total_memory_gb.toFixed(1)} GB` : "0.0 GB"}
+                {deviceInfo?.total_memory_gb ? `${deviceInfo.total_memory_gb.toFixed(1)} GB` : "0.0 GB"}
               </div>
               <p className="text-xs text-cyan-300">Available RAM</p>
             </CardContent>
@@ -321,7 +524,7 @@ export default function Dashboard() {
                     </div>
                     <div>
                       <span className="text-cyan-300">Memory:</span>
-                      <div className="text-blue-400 font-bold">{realTimeStats.memoryUsage}MB</div>
+                      <div className="text-blue-400 font-bold">{realTimeStats.memoryUsage}%</div>
                     </div>
                     <div>
                       <span className="text-cyan-300">Temperature:</span>
@@ -377,7 +580,7 @@ export default function Dashboard() {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-cyan-300">Average Latency</span>
-                      <div className="text-blue-400 font-bold">{Math.floor(Math.random() * 50) + 20}ms</div>
+                      <div className="text-blue-400 font-bold">{networkStats?.average_latency_ms ?? 0}ms</div>
                     </div>
                     <div>
                       <span className="text-cyan-300">Network Status</span>
@@ -404,15 +607,15 @@ export default function Dashboard() {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-cyan-300">Compute Hours:</span>
-                        <span className="text-blue-400">{sessionRecord?.total_compute_hours || 0}</span>
+                        <span className="text-blue-400">{socialStats.computeHours}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-cyan-300">Rank:</span>
-                        <span className="text-blue-400">#42</span>
+                        <span className="text-blue-400">{socialStats.rank}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-cyan-300">Followers:</span>
-                        <span className="text-blue-400">0</span>
+                        <span className="text-blue-400">{socialStats.followers}</span>
                       </div>
                     </div>
                   </div>
@@ -423,10 +626,15 @@ export default function Dashboard() {
                       <code className="bg-gray-800 px-3 py-2 rounded text-blue-400 font-mono">
                         {generateInviteCode()}
                       </code>
-                      <Button size="sm" className="dedsec-button">
+                      <Button size="sm" className="dedsec-button" onClick={onShareInvite}>
                         <Share2 className="w-4 h-4" />
                       </Button>
                     </div>
+                    {qrDataUrl && (
+                      <div className="mt-3">
+                        <img src={qrDataUrl} alt="Invite QR" className="border border-blue-400/30 rounded p-2 bg-slate-900" />
+                      </div>
+                    )}
                     <p className="text-xs text-cyan-300 mt-2">Share this code to invite others to the network</p>
                   </div>
                 </div>
@@ -515,6 +723,10 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between">
                     <Label className="text-blue-400">Only when idle</Label>
                     <Switch checked={onlyWhenIdle} onCheckedChange={setOnlyWhenIdle} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-blue-400">Allow distributed compute (consent)</Label>
+                    <Switch checked={consentGranted} onCheckedChange={toggleConsent} />
                   </div>
                 </div>
 

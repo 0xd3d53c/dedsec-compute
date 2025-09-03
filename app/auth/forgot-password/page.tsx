@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Shield, Mail, Lock, Eye, EyeOff, AlertTriangle, CheckCircle, Clock } from "lucide-react"
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordInner() {
   const [email, setEmail] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -412,5 +412,13 @@ export default function ForgotPasswordPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function ForgotPasswordPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950 text-blue-400 matrix-bg flex items-center justify-center p-4">Loading...</div>}>
+      <ForgotPasswordInner />
+    </Suspense>
   )
 }

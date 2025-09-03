@@ -12,19 +12,26 @@ export async function middleware(request: NextRequest) {
   response.headers.set('X-XSS-Protection', '1; mode=block')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin')
+  response.headers.set('Cross-Origin-Embedder-Policy', 'require-corp')
+  response.headers.set('Cross-Origin-Resource-Policy', 'same-site')
+  response.headers.set('Origin-Agent-Cluster', '?1')
   
   // Content Security Policy for XSS protection
   // Allow Next.js development features in dev mode
   const isDev = process.env.NODE_ENV === 'development'
   const csp = [
     "default-src 'self'",
-    isDev 
-      ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net"
-      : "script-src 'self' https://cdn.jsdelivr.net",
+    isDev
+      ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https://cdn.jsdelivr.net"
+      : "script-src 'self' blob: https://cdn.jsdelivr.net",
+    "worker-src 'self' blob:",
     "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: https:",
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co" + (isDev ? " ws://localhost:*" : ""),
+    "manifest-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'"

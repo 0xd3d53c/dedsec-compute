@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { Suspense, useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Shield, Loader2, CheckCircle, AlertTriangle } from "lucide-react"
@@ -10,7 +10,6 @@ export default function AuthCallbackPage() {
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading")
   const [message, setMessage] = useState("")
   const router = useRouter()
-  const searchParams = useSearchParams()
 
   useEffect(() => {
     const handleAuthCallback = async () => {
@@ -60,8 +59,9 @@ export default function AuthCallbackPage() {
   }, [router])
 
   return (
-    <div className="min-h-screen bg-slate-950 text-blue-400 matrix-bg flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <Suspense fallback={<div className="min-h-screen bg-slate-950 text-blue-400 matrix-bg flex items-center justify-center p-4">Loading...</div>}>
+      <div className="min-h-screen bg-slate-950 text-blue-400 matrix-bg flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
         <Card className="dedsec-border bg-slate-950/80">
           <CardHeader className="text-center pb-4">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-500 text-white mb-3">
@@ -98,7 +98,8 @@ export default function AuthCallbackPage() {
             )}
           </CardContent>
         </Card>
+        </div>
       </div>
-    </div>
+    </Suspense>
   )
 }

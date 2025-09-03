@@ -603,3 +603,16 @@ export class HardwareMonitor {
     return Math.min(100, Math.max(0, score))
   }
 }
+
+// Convenience helper for callers that just need a one-shot device info
+export async function detectHardware(): Promise<DeviceInfo> {
+  const monitor = new HardwareMonitor({
+    max_cpu_percent: 100,
+    max_memory_mb: 16384,
+    only_when_charging: false,
+    only_when_idle: false,
+    temperature_threshold: 85,
+    max_battery_drain_percent: 100,
+  })
+  return monitor.detectEnhancedHardware()
+}

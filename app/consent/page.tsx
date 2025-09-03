@@ -31,10 +31,11 @@ export default function ConsentPage() {
       // Detect hardware capabilities
       const deviceInfo = await detectHardware()
 
-      // Create follower record
-      const { error: followerError } = await supabase.from("followers").insert({
+      // Create user_session record
+      const { error: sessionError } = await supabase.from("user_sessions").insert({
         user_id: user.id,
-        device_info: deviceInfo,
+        device_id: `device_${user.id.slice(0,8)}`,
+        hardware_specs: deviceInfo,
         max_cpu_percent: 25,
         max_memory_mb: 512,
         only_when_charging: true,
@@ -42,7 +43,7 @@ export default function ConsentPage() {
         is_contributing: false,
       })
 
-      if (followerError) throw followerError
+      if (sessionError) throw sessionError
 
       // Update network metrics
       await supabase.rpc("update_network_metrics")
