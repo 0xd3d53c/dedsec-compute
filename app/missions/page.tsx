@@ -122,10 +122,10 @@ export default function MissionsPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-blue-400">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <header className="mb-6">
+        <div className="mb-6">
           <h1 className="text-3xl font-bold dedsec-glow text-blue-400">Missions</h1>
           <p className="text-cyan-300">Accept and track real missions in the network.</p>
-        </header>
+        </div>
 
         <Tabs defaultValue="available" className="space-y-6">
           <TabsList className="bg-slate-950 border border-blue-400 grid grid-cols-2 w-full">

@@ -5,7 +5,6 @@ import * as QRCode from 'qrcode'
 export interface User2FA {
   id: string
   username: string
-  display_name: string
   email: string
   profile_picture_url?: string
   two_factor_enabled: boolean
@@ -54,7 +53,6 @@ export class AuthManager {
           user: {
             id: userData.id,
             username: userData.username,
-            display_name: userData.display_name,
             email: userData.email || data.user.email || "",
             profile_picture_url: userData.profile_picture_url,
             two_factor_enabled: userData.two_factor_enabled,
@@ -186,7 +184,6 @@ export class AuthManager {
         user: {
           id: userData.id,
           username: userData.username,
-          display_name: userData.display_name,
           email: userData.email || user.email || "",
           profile_picture_url: userData.profile_picture_url,
           two_factor_enabled: userData.two_factor_enabled,
@@ -204,7 +201,7 @@ export class AuthManager {
       const secret = speakeasy.generateSecret({
         name: `DedSecCompute (${userId})`,
         issuer: 'DedSecCompute',
-        length: 32
+        length: 20 // Shorter length to fit in 32 char limit
       })
 
       // Generate QR code
@@ -242,20 +239,28 @@ export class AuthManager {
         .eq("id", userId)
         .single()
 
-      if (userError || !userData.two_factor_secret) {
-        return { success: false, error: "2FA not configured" }
+      if (userError) {
+        console.error("Database error fetching 2FA secret:", userError)
+        return { success: false, error: "Database error: " + userError.message }
       }
+
+      if (!userData || !userData.two_factor_secret) {
+        return { success: false, error: "2FA not configured. Please set up 2FA first." }
+      }
+
+      // Clean the token (remove spaces, etc.)
+      const cleanToken = token.replace(/\s/g, '')
 
       // Verify the token
       const verified = speakeasy.totp.verify({
         secret: userData.two_factor_secret,
         encoding: 'base32',
-        token: token,
+        token: cleanToken,
         window: 2 // Allow 2 time steps before/after current time
       })
 
       if (!verified) {
-        return { success: false, error: "Invalid verification code" }
+        return { success: false, error: "Invalid verification code. Please check your authenticator app and try again." }
       }
 
       // Enable 2FA and generate backup codes
@@ -273,12 +278,14 @@ export class AuthManager {
         .eq("id", userId)
 
       if (updateError) {
-        return { success: false, error: updateError.message }
+        console.error("Database error updating 2FA status:", updateError)
+        return { success: false, error: "Database error: " + updateError.message }
       }
 
       return { success: true }
     } catch (error) {
-      return { success: false, error: "Failed to verify 2FA code" }
+      console.error("2FA verification error:", error)
+      return { success: false, error: "Failed to verify 2FA code: " + (error as Error).message }
     }
   }
 

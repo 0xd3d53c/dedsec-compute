@@ -18,12 +18,10 @@ import {
   Zap,
   Activity,
   Settings,
-  LogOut,
   Play,
   Pause,
   Eye,
   Share2,
-  User,
 } from "lucide-react"
 import { HardwareMonitor, type ResourceLimits, type RealTimeStats } from "@/lib/hardware-detection"
 import { BackgroundWorker } from "@/lib/background-worker"
@@ -38,6 +36,7 @@ export default function Dashboard() {
   const [sessionRecord, setSessionRecord] = useState<any>(null)
   const [networkStats, setNetworkStats] = useState<any>(null)
   const [operations, setOperations] = useState<any[]>([])
+  const [myMissions, setMyMissions] = useState<any[]>([])
   const [isContributing, setIsContributing] = useState(false)
   const [cpuPercent, setCpuPercent] = useState([25])
   const [memoryMB, setMemoryMB] = useState([512])
@@ -83,6 +82,7 @@ export default function Dashboard() {
       loadUserProfile(user.id)
       loadUserData(user.id)
       loadSocialData(user.id)
+      loadMyMissions(user.id)
       prepareInvite(user.id)
       loadConsent(user.id)
 
@@ -120,7 +120,9 @@ export default function Dashboard() {
 
     // Capture stable device info once
     monitor.detectEnhancedHardware().then((info) => {
-      setDeviceInfo({ cpu_cores: info.cpu_cores, total_memory_gb: info.total_memory_gb })
+      // Get actual device memory from browser if available
+      const actualMemory = (navigator as any).deviceMemory || info.total_memory_gb
+      setDeviceInfo({ cpu_cores: info.cpu_cores, total_memory_gb: actualMemory })
     })
 
     const interval = setInterval(() => {
@@ -206,6 +208,33 @@ export default function Dashboard() {
       .limit(1)
       .maybeSingle()
     setConsentGranted(!!(data && data.granted && !data.revoked_at))
+  }
+
+  const loadMyMissions = async (userId: string) => {
+    const supabase = createClient()
+
+    const { data: missions } = await supabase
+      .from("user_missions")
+      .select(`
+        id,
+        mission_id,
+        status,
+        started_at,
+        completed_at,
+        missions (
+          id,
+          code,
+          title,
+          description,
+          difficulty
+        )
+      `)
+      .eq("user_id", userId)
+      .in("status", ["accepted", "in_progress"])
+      .order("updated_at", { ascending: false })
+      .limit(3)
+
+    setMyMissions(missions || [])
   }
 
   const loadSocialData = async (userId: string) => {
@@ -362,11 +391,7 @@ export default function Dashboard() {
     }
   }
 
-  const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push("/")
-  }
+
 
   const generateInviteCode = () => {
     return inviteCode || (sessionRecord?.user_id ? `d3d_${sessionRecord.user_id.slice(0, 8).toUpperCase()}` : "d3d_LOADING")
@@ -390,55 +415,11 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-slate-950 text-blue-400 matrix-bg">
       <div className="container mx-auto px-4 py-4 sm:py-8 max-w-7xl">
-        {/* Header */}
-        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-4">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-500 text-white">
-              <Shield className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold dedsec-glow text-blue-400">DedSec Network</h1>
-              <p className="text-sm sm:text-base text-cyan-300">Distributed Computing Collective</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
-            {/* User Profile Section */}
-            <div className="flex items-center gap-3 bg-slate-900/50 rounded-lg px-3 py-2 border border-blue-400/30">
-              <div className="flex items-center gap-2">
-                {userProfile?.profile_picture_url ? (
-                  <img
-                    src={userProfile.profile_picture_url}
-                    alt="Profile"
-                    className="w-8 h-8 rounded-full object-cover border border-blue-400/50"
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
-                    <User className="w-4 h-4 text-white" />
-                  </div>
-                )}
-                <div className="hidden sm:block">
-                  <p className="text-sm font-medium text-blue-400">
-                    {userProfile?.display_name || userProfile?.username || "User"}
-                  </p>
-                  <p className="text-xs text-cyan-300">@{userProfile?.username || "user"}</p>
-                </div>
-              </div>
-            </div>
-            
-            <Button 
-              onClick={() => router.push("/profile")} 
-              className="dedsec-button text-xs sm:text-sm px-3 sm:px-4"
-            >
-              <Settings className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-              Settings
-            </Button>
-            
-            <Button onClick={handleLogout} className="dedsec-button text-xs sm:text-sm px-3 sm:px-4">
-              <LogOut className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-              Logout
-            </Button>
-          </div>
-        </header>
+        {/* Page Title */}
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold dedsec-glow text-blue-400">Dashboard</h1>
+          <p className="text-sm sm:text-base text-cyan-300">Monitor your contribution to the network</p>
+        </div>
 
         {/* Status Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
@@ -521,11 +502,11 @@ export default function Dashboard() {
               <span className="hidden sm:inline">Social</span>
             </TabsTrigger>
             <TabsTrigger
-              value="operations"
+              value="missions"
               className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs sm:text-sm py-2 px-1 sm:px-3"
             >
               <Zap className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Operations</span>
+              <span className="hidden sm:inline">Missions</span>
             </TabsTrigger>
             <TabsTrigger
               value="settings"
@@ -690,40 +671,57 @@ export default function Dashboard() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="operations">
+          <TabsContent value="missions">
             <Card className="dedsec-border bg-slate-950/80">
               <CardHeader>
                 <CardTitle className="text-blue-400 flex items-center gap-2">
-                  <Eye className="w-5 h-5" />
-                  Available Operations ({operations.filter((op) => op.is_active).length})
+                  <Zap className="w-5 h-5" />
+                  Ongoing Missions ({myMissions.length})
                 </CardTitle>
                 <CardDescription className="text-cyan-300">
-                  Computing operations available to the network
+                  Your active missions in the network
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {operations.map((operation) => (
-                    <div key={operation.id} className="border border-blue-400 rounded-lg p-4">
+                  {myMissions.map((mission) => (
+                    <div key={mission.id} className="border border-blue-400 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-bold text-blue-400">{operation.name}</h4>
-                        <Badge className={operation.is_active ? "bg-blue-600" : "bg-gray-600"}>
-                          {operation.is_active ? "Active" : "Locked"}
+                        <h4 className="font-bold text-blue-400">{mission.missions?.title || "Unknown Mission"}</h4>
+                        <Badge className={mission.status === "in_progress" ? "bg-green-600" : "bg-blue-600"}>
+                          {mission.status === "in_progress" ? "In Progress" : "Accepted"}
                         </Badge>
                       </div>
-                      <p className="text-cyan-300 text-sm mb-2">{operation.description}</p>
-                      <div className="text-xs text-blue-600">
-                        Required compute power: {operation.required_compute_power} GFLOPS
+                      <p className="text-cyan-300 text-sm mb-2">{mission.missions?.description || "No description available"}</p>
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs text-blue-600">
+                          Code: {mission.missions?.code || "N/A"} | Difficulty: {mission.missions?.difficulty || "Unknown"}
+                        </div>
+                        {mission.started_at && (
+                          <div className="text-xs text-cyan-300">
+                            Started: {new Date(mission.started_at).toLocaleDateString()}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
 
-                  {operations.filter((op) => op.is_active).length === 0 && (
+                  {myMissions.length === 0 && (
                     <div className="text-center py-8 text-blue-600">
-                      <p>No operations available yet.</p>
-                      <p className="text-sm">Network needs more compute power to unlock operations.</p>
+                      <p>No active missions.</p>
+                      <p className="text-sm">Accept missions to start contributing to the network.</p>
                     </div>
                   )}
+
+                  <div className="pt-4 border-t border-blue-400/30">
+                    <Button 
+                      onClick={() => router.push("/missions")} 
+                      className="w-full dedsec-button"
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      View All Missions
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

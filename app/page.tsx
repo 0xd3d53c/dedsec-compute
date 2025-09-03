@@ -5,8 +5,8 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-blue-400 matrix-bg">
       <div className="container mx-auto px-4 py-6 sm:py-8">
-        {/* Header */}
-        <header className="text-center mb-8 sm:mb-12">
+        {/* Hero Section */}
+        <div className="text-center mb-8 sm:mb-12">
           <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-blue-500 text-white mb-4 sm:mb-6">
             <Shield className="w-8 h-8 sm:w-10 sm:h-10" />
           </div>
@@ -15,7 +15,7 @@ export default function HomePage() {
           </h1>
           <p className="text-lg sm:text-xl text-cyan-300 mb-3 sm:mb-4">Distributed Computing Network</p>
           <p className="text-base sm:text-lg text-blue-300 font-mono italic">"Power to the Collective"</p>
-        </header>
+        </div>
 
         {/* Main Content */}
         <div className="max-w-6xl mx-auto">

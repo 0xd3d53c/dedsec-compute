@@ -16,7 +16,6 @@ import { authManager } from "@/lib/auth-utils"
 interface UserProfile {
   id: string
   username: string
-  display_name: string
   phone?: string
   country_code?: string
   profile_picture_url?: string
@@ -33,7 +32,7 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false)
 
   // Profile form state
-  const [displayName, setDisplayName] = useState("")
+  const [username, setUsername] = useState("")
   const [profilePicture, setProfilePicture] = useState<File | null>(null)
   const [profilePictureUrl, setProfilePictureUrl] = useState("")
 
@@ -84,7 +83,7 @@ export default function ProfilePage() {
       if (error) throw error
 
       setProfile(profileData)
-      setDisplayName(profileData.display_name || "")
+      setUsername(profileData.username || "")
       setProfilePictureUrl(profileData.profile_picture_url || "")
       setIs2FAEnabled(profileData.two_factor_enabled || false)
       setBackupCodes(profileData.backup_codes || [])
@@ -112,7 +111,7 @@ export default function ProfilePage() {
     return null
   }
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -122,8 +121,45 @@ export default function ProfilePage() {
       return
     }
 
-    setProfilePicture(file)
-    setMessage({ type: "success", text: "Image selected successfully" })
+    if (!profile) return
+
+    setIsSaving(true)
+    try {
+      const fileExt = file.name.split(".").pop()
+      const fileName = `${profile.id}/${Date.now()}.${fileExt}`
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("profile-pictures")
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true
+        })
+
+      if (uploadError) throw uploadError
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("profile-pictures").getPublicUrl(fileName)
+
+      // Update profile picture URL in database
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({
+          profile_picture_url: publicUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", profile.id)
+
+      if (updateError) throw updateError
+
+      setProfilePictureUrl(publicUrl)
+      setMessage({ type: "success", text: "Profile picture updated successfully!" })
+      await loadProfile(profile.id)
+    } catch (error) {
+      console.error("Failed to upload profile picture:", error)
+      setMessage({ type: "error", text: "Failed to upload profile picture" })
+    }
+    setIsSaving(false)
   }
 
   const updateProfile = async () => {
@@ -131,34 +167,10 @@ export default function ProfilePage() {
 
     setIsSaving(true)
     try {
-      let uploadedImageUrl = profilePictureUrl
-
-      // Upload profile picture if selected
-      if (profilePicture) {
-        const fileExt = profilePicture.name.split(".").pop()
-        const fileName = `${profile.id}/${Date.now()}.${fileExt}`
-
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("profile-pictures")
-          .upload(fileName, profilePicture, {
-            cacheControl: '3600',
-            upsert: true
-          })
-
-        if (uploadError) throw uploadError
-
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("profile-pictures").getPublicUrl(fileName)
-
-        uploadedImageUrl = publicUrl
-      }
-
       const { error } = await supabase
         .from("users")
         .update({
-          display_name: displayName,
-          profile_picture_url: uploadedImageUrl,
+          username: username,
           updated_at: new Date().toISOString(),
         })
         .eq("id", profile.id)
@@ -166,7 +178,6 @@ export default function ProfilePage() {
       if (error) throw error
 
       setMessage({ type: "success", text: "Profile updated successfully!" })
-      setProfilePicture(null) // Clear the selected file
       await loadProfile(profile.id)
     } catch (error) {
       console.error("[v0] Failed to update profile:", error)
@@ -286,22 +297,12 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-cyan-400">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <header className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-cyan-400 text-slate-950">
-              <User className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-cyan-400" style={{ textShadow: "0 0 10px currentColor" }}>
-                Profile Settings
-              </h1>
-              <p className="text-cyan-300">Manage your account and security settings</p>
-            </div>
-          </div>
-          <Button onClick={() => router.push("/dashboard")} className="bg-cyan-600 hover:bg-cyan-500">
-            Back to Dashboard
-          </Button>
-        </header>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-cyan-400" style={{ textShadow: "0 0 10px currentColor" }}>
+            Profile Settings
+          </h1>
+          <p className="text-cyan-300">Manage your account and security settings</p>
+        </div>
 
         {message && (
           <div
@@ -350,18 +351,13 @@ export default function ProfilePage() {
                     <Label htmlFor="picture" className="text-cyan-400">
                       Profile Picture
                     </Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        id="picture"
-                        type="file"
-                        accept="image/jpeg,image/jpg,image/png"
-                        onChange={handleImageUpload}
-                        className="bg-slate-950 border-cyan-400 text-cyan-400"
-                      />
-                      <Button size="sm" className="bg-cyan-600 hover:bg-cyan-500">
-                        <Upload className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    <Input
+                      id="picture"
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png"
+                      onChange={handleImageUpload}
+                      className="bg-slate-950 border-cyan-400 text-cyan-400"
+                    />
                     <p className="text-xs text-cyan-300">
                       Supported formats: JPG, PNG. Maximum size: 4MB
                     </p>
@@ -376,30 +372,16 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="username" className="text-cyan-400">
-                      Username (Cannot be changed)
+                      Username
                     </Label>
                     <Input
                       id="username"
-                      value={profile?.username || ""}
-                      disabled
-                      className="bg-slate-800 border-slate-600 text-slate-400"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="display_name" className="text-cyan-400">
-                      Display Name
-                    </Label>
-                    <Input
-                      id="display_name"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
                       className="bg-slate-950 border-cyan-400 text-cyan-400"
-                      placeholder="Your display name"
+                      placeholder="Your username"
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="phone" className="text-cyan-400">
                       Phone Number
@@ -411,6 +393,9 @@ export default function ProfilePage() {
                       className="bg-slate-800 border-slate-600 text-slate-400"
                     />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="created" className="text-cyan-400">
                       Member Since
