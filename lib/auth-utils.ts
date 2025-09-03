@@ -219,7 +219,7 @@ export class AuthManager {
 
   async enable2FA(userId: string): Promise<{ success: boolean; secret?: string; qrCode?: string; error?: string }> {
     try {
-      // Generate a new secret
+      // Generate a new secret using speakeasy v2.0.0 API
       const secret = speakeasy.generateSecret({
         name: `DedSecCompute (${userId})`,
         issuer: 'DedSecCompute',
@@ -274,14 +274,25 @@ export class AuthManager {
       // Clean the token (remove spaces, etc.)
       const cleanToken = token.replace(/\s/g, '')
 
-      // Verify the token
-      const verified = speakeasy.totp.verify({
-        secret: userData.two_factor_secret,
-        encoding: 'base32',
-        token: cleanToken,
-        window: 2, // Allow 2 time steps before/after current time
-        time: Math.floor(Date.now() / 1000) // Explicitly set current time
-      })
+      // Validate the secret format
+      if (!userData.two_factor_secret || userData.two_factor_secret.length < 16) {
+        return { success: false, error: "Invalid 2FA secret format. Please set up 2FA again." }
+      }
+
+      // Verify the token using speakeasy v1.0.0 API
+      let verified = false
+      try {
+        verified = speakeasy.totp.verify({
+          secret: userData.two_factor_secret,
+          encoding: 'base32',
+          token: cleanToken,
+          window: 2, // Allow 2 time steps before/after current time
+          time: Math.floor(Date.now() / 1000) // Explicitly set current time
+        })
+      } catch (verifyError) {
+        console.error('Speakeasy verification error:', verifyError)
+        return { success: false, error: "2FA verification failed. Please try again or contact support." }
+      }
 
       if (!verified) {
         return { success: false, error: "Invalid verification code. Please check your authenticator app and try again." }

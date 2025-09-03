@@ -83,7 +83,8 @@ export default function ProfilePage() {
       await loadProfile(user.id)
     } catch (error) {
       console.error("[v0] Auth check failed:", error)
-      router.push("/auth/login")
+      setMessage({ type: "error", text: "Authentication failed. Redirecting to login in 2 seconds..." })
+      setTimeout(() => router.push("/auth/login"), 2000)
     }
   }
 
@@ -101,7 +102,7 @@ export default function ProfilePage() {
       setIsLoading(false)
     } catch (error) {
       console.error("[v0] Failed to load profile:", error)
-      setMessage({ type: "error", text: "Failed to load profile data" })
+      setMessage({ type: "error", text: "Failed to load profile data. Please refresh the page and try again." })
       setIsLoading(false)
     }
   }
@@ -110,17 +111,34 @@ export default function ProfilePage() {
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) return
+    if (!file) {
+      setMessage({ type: "error", text: "Please select a file to upload" })
+      uploadProgress.endUpload(false, "No file selected")
+      return
+    }
 
-    if (!profile) return
+    if (!profile) {
+      setMessage({ type: "error", text: "Profile not loaded. Please refresh the page and try again." })
+      uploadProgress.endUpload(false, "Profile not loaded")
+      return
+    }
+
+    // Validate file before upload
+    const validation = validateProfilePictureFile(file)
+    if (!validation.isValid) {
+      setMessage({ type: "error", text: validation.error || "Invalid file format or size. Please use JPG, PNG, or WebP files under 4MB." })
+      uploadProgress.endUpload(false, validation.error || "Invalid file format or size")
+      return
+    }
 
     // Check rate limiting
     if (!uploadRateLimiter.canUpload(profile.id)) {
       const timeUntilNext = uploadRateLimiter.getTimeUntilNextUpload(profile.id)
       setMessage({ 
         type: "error", 
-        text: `Rate limit exceeded. Try again in ${Math.ceil(timeUntilNext / 1000)} seconds` 
+        text: `Upload rate limit exceeded. Please wait ${Math.ceil(timeUntilNext / 1000)} seconds before trying again.` 
       })
+      uploadProgress.endUpload(false, `Rate limit exceeded. Please wait ${Math.ceil(timeUntilNext / 1000)} seconds.`)
       return
     }
 
@@ -140,7 +158,8 @@ export default function ProfilePage() {
       })
       
       if (!uploadResult.success) {
-        setMessage({ type: "error", text: uploadResult.error || "Upload failed" })
+        setMessage({ type: "error", text: uploadResult.error || "Upload failed. Please check your connection and try again." })
+        uploadProgress.endUpload(false, uploadResult.error || "Upload failed")
         return
       }
 
@@ -148,22 +167,28 @@ export default function ProfilePage() {
       const updateResult = await updateUserProfilePicture(profile.id, uploadResult.url!)
       
       if (!updateResult.success) {
-        setMessage({ type: "error", text: updateResult.error || "Database update failed" })
+        setMessage({ type: "error", text: updateResult.error || "Database update failed. Please check your connection and try again." })
+        uploadProgress.endUpload(false, updateResult.error || "Database update failed")
         return
       }
 
       // Update local state immediately (no need to reload from database)
       setProfilePictureUrl(uploadResult.url!)
       setMessage({ type: "success", text: "Profile picture updated successfully!" })
+      uploadProgress.endUpload(true, "Upload successful!")
     } catch (error) {
       console.error("Failed to upload profile picture:", error)
-      setMessage({ type: "error", text: "Failed to upload profile picture" })
+      setMessage({ type: "error", text: "Failed to upload profile picture. Please check your connection and try again." })
+      uploadProgress.endUpload(false, "Upload failed!")
     }
     setIsSaving(false)
   }
 
   const updateProfile = async () => {
-    if (!profile) return
+    if (!profile) {
+      setMessage({ type: "error", text: "Profile not loaded. Please refresh the page." })
+      return
+    }
 
     setIsSaving(true)
     try {
@@ -190,13 +215,16 @@ export default function ProfilePage() {
       setMessage({ type: "success", text: "Profile updated successfully!" })
     } catch (error) {
       console.error("[v0] Failed to update profile:", error)
-      setMessage({ type: "error", text: "Failed to update profile" })
+      setMessage({ type: "error", text: "Failed to update profile. Please check your input and try again." })
     }
     setIsSaving(false)
   }
 
   const setup2FA = async () => {
-    if (!profile) return
+    if (!profile) {
+      setMessage({ type: "error", text: "Profile not loaded. Please refresh the page and try again." })
+      return
+    }
 
     try {
       const result = await authManager.enable2FA(profile.id)
@@ -206,16 +234,24 @@ export default function ProfilePage() {
         setQrCodeUrl(result.qrCode)
         setMessage({ type: "success", text: "2FA setup initiated. Scan the QR code with your authenticator app." })
       } else {
-        setMessage({ type: "error", text: result.error || "Failed to setup 2FA" })
+        setMessage({ type: "error", text: result.error || "Failed to setup 2FA. Please check your connection and try again." })
       }
     } catch (error) {
       console.error("[v0] Failed to setup 2FA:", error)
-      setMessage({ type: "error", text: "Failed to setup 2FA" })
+      setMessage({ type: "error", text: "Failed to setup 2FA. Please check your connection and try again." })
     }
   }
 
   const verify2FA = async () => {
-    if (!profile || !verificationCode) return
+    if (!profile) {
+      setMessage({ type: "error", text: "Profile not loaded. Please refresh the page and try again." })
+      return
+    }
+
+    if (!verificationCode) {
+      setMessage({ type: "error", text: "Please enter a verification code" })
+      return
+    }
 
     try {
       const result = await authManager.verify2FA(profile.id, verificationCode)
@@ -228,16 +264,19 @@ export default function ProfilePage() {
         await loadProfile(profile.id)
         setShowBackupCodes(true)
       } else {
-        setMessage({ type: "error", text: result.error || "Invalid verification code" })
+        setMessage({ type: "error", text: result.error || "Invalid verification code. Please check your authenticator app and try again." })
       }
     } catch (error) {
       console.error("[v0] Failed to verify 2FA:", error)
-      setMessage({ type: "error", text: "Failed to verify 2FA code" })
+      setMessage({ type: "error", text: "Failed to verify 2FA code. Please check your connection and try again." })
     }
   }
 
   const disable2FA = async () => {
-    if (!profile) return
+    if (!profile) {
+      setMessage({ type: "error", text: "Profile not loaded. Please refresh the page and try again." })
+      return
+    }
 
     try {
       const result = await authManager.disable2FA(profile.id)
@@ -251,15 +290,20 @@ export default function ProfilePage() {
         setMessage({ type: "success", text: "2FA disabled successfully" })
         await loadProfile(profile.id)
       } else {
-        setMessage({ type: "error", text: result.error || "Failed to disable 2FA" })
+        setMessage({ type: "error", text: result.error || "Failed to disable 2FA. Please check your connection and try again." })
       }
     } catch (error) {
       console.error("[v0] Failed to disable 2FA:", error)
-      setMessage({ type: "error", text: "Failed to disable 2FA" })
+      setMessage({ type: "error", text: "Failed to disable 2FA. Please check your connection and try again." })
     }
   }
 
   const changePassword = async () => {
+    if (!profile) {
+      setMessage({ type: "error", text: "Profile not loaded. Please refresh the page and try again." })
+      return
+    }
+
     if (newPassword !== confirmPassword) {
       setMessage({ type: "error", text: "New passwords do not match" })
       return
@@ -283,13 +327,18 @@ export default function ProfilePage() {
       setConfirmPassword("")
     } catch (error) {
       console.error("[v0] Failed to change password:", error)
-      setMessage({ type: "error", text: "Failed to change password" })
+      setMessage({ type: "error", text: "Failed to change password. Please check your input and try again." })
     }
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    setMessage({ type: "success", text: "Copied to clipboard!" })
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setMessage({ type: "success", text: "Copied to clipboard!" })
+    } catch (error) {
+      console.error("Failed to copy to clipboard:", error)
+      setMessage({ type: "error", text: "Failed to copy to clipboard" })
+    }
   }
 
   if (isLoading) {

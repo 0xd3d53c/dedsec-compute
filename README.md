@@ -90,6 +90,7 @@ Since Supabase hosted doesn't support `pg_cron`, database maintenance is handled
 **Option 1: GitHub Actions (Recommended)**
 - Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to repository secrets
 - The workflow runs daily at 1 AM UTC
+- See [docs/GITHUB_ACTIONS_SETUP.md](docs/GITHUB_ACTIONS_SETUP.md) for detailed setup
 
 **Option 2: Vercel Cron Jobs**
 - Add `CRON_SECRET` environment variable
@@ -98,6 +99,14 @@ Since Supabase hosted doesn't support `pg_cron`, database maintenance is handled
 **Option 3: Manual Execution**
 ```sql
 SELECT * FROM scheduled_maintenance();
+```
+
+**Testing Your Setup**
+```bash
+# Test Supabase connection before setting up automation
+export SUPABASE_URL="https://your-project.supabase.co"
+export SUPABASE_ANON_KEY="your-anon-key"
+node scripts/test-supabase-connection.js
 ```
 
 See [docs/EXTERNAL_SCHEDULING.md](docs/EXTERNAL_SCHEDULING.md) for detailed setup instructions.
@@ -199,6 +208,24 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Check the [documentation](docs/) for detailed guides
 - Open an issue for bug reports or feature requests
 - Review the [external scheduling guide](docs/EXTERNAL_SCHEDULING.md) for maintenance setup
+
+## 🐛 Troubleshooting
+
+### GitHub Actions Issues
+- **"URL rejected: No host part"**: Add `SUPABASE_URL` secret to repository
+- **"401 Unauthorized"**: Verify `SUPABASE_ANON_KEY` secret is correct
+- **"Function not found"**: Run SQL migration scripts in Supabase
+
+### Profile Picture Upload Issues
+- **Upload fails**: Check file size (max 4MB) and format (JPG, PNG, WebP)
+- **Rate limit exceeded**: Wait 1 minute between uploads (5 uploads/minute limit)
+- **Image not displaying**: Check browser console for errors
+
+### Database Connection Issues
+```bash
+# Test your Supabase connection
+node scripts/test-supabase-connection.js
+```
 
 ## 🎯 Roadmap
 
