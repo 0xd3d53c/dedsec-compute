@@ -223,7 +223,8 @@ export class AuthManager {
       const secret = speakeasy.generateSecret({
         name: `DedSecCompute (${userId})`,
         issuer: 'DedSecCompute',
-        length: 20 // Shorter length to fit in 32 char limit
+        length: 20, // Shorter length to fit in 32 char limit
+        symbols: false // Ensure no special characters that might cause issues
       })
 
       // Generate QR code
@@ -278,7 +279,8 @@ export class AuthManager {
         secret: userData.two_factor_secret,
         encoding: 'base32',
         token: cleanToken,
-        window: 2 // Allow 2 time steps before/after current time
+        window: 2, // Allow 2 time steps before/after current time
+        time: Math.floor(Date.now() / 1000) // Explicitly set current time
       })
 
       if (!verified) {

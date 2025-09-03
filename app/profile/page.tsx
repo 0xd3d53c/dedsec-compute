@@ -16,9 +16,12 @@ import {
   validateProfilePictureFile, 
   uploadProfilePicture, 
   updateUserProfilePicture,
-  getAvatarFallback 
+  getAvatarFallback,
+  uploadRateLimiter,
+  compressImage
 } from "@/lib/profile-utils"
 import { sanitizeUsername, sanitizeText } from "@/lib/security-utils"
+import { UploadProgress, useUploadProgress } from "@/components/upload-progress"
 
 interface UserProfile {
   id: string
@@ -57,6 +60,7 @@ export default function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState("")
 
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const uploadProgress = useUploadProgress()
 
   const supabase = createClient()
 
@@ -110,10 +114,30 @@ export default function ProfilePage() {
 
     if (!profile) return
 
+    // Check rate limiting
+    if (!uploadRateLimiter.canUpload(profile.id)) {
+      const timeUntilNext = uploadRateLimiter.getTimeUntilNextUpload(profile.id)
+      setMessage({ 
+        type: "error", 
+        text: `Rate limit exceeded. Try again in ${Math.ceil(timeUntilNext / 1000)} seconds` 
+      })
+      return
+    }
+
     setIsSaving(true)
+    uploadProgress.startUpload("Uploading profile picture...")
+    
     try {
-      // Upload profile picture using shared utility
-      const uploadResult = await uploadProfilePicture(profile.id, file)
+      // Upload profile picture with compression using shared utility
+      const uploadResult = await uploadProfilePicture(profile.id, file, {
+        compress: true,
+        compressionOptions: {
+          maxWidth: 800,
+          maxHeight: 800,
+          quality: 0.8,
+          format: 'jpeg'
+        }
+      })
       
       if (!uploadResult.success) {
         setMessage({ type: "error", text: uploadResult.error || "Upload failed" })
@@ -281,6 +305,13 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-cyan-400">
+      <UploadProgress
+        isVisible={uploadProgress.isVisible}
+        progress={uploadProgress.progress}
+        status={uploadProgress.status}
+        message={uploadProgress.message}
+        onClose={uploadProgress.hide}
+      />
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-cyan-400" style={{ textShadow: "0 0 10px currentColor" }}>

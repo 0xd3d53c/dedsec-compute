@@ -21,7 +21,9 @@ import {
   validateProfilePictureFile, 
   uploadProfilePicture, 
   updateUserProfilePicture,
-  getAvatarFallback 
+  getAvatarFallback,
+  uploadRateLimiter,
+  compressImage
 } from "@/lib/profile-utils"
 
 interface QuickProfileProps {
@@ -50,7 +52,24 @@ export function QuickProfileCard({ user, onProfileUpdate }: QuickProfileProps) {
 
       // Upload profile picture if selected
       if (profilePicture) {
-        const uploadResult = await uploadProfilePicture(user.id, profilePicture)
+        // Check rate limiting
+        if (!uploadRateLimiter.canUpload(user.id)) {
+          const timeUntilNext = uploadRateLimiter.getTimeUntilNextUpload(user.id)
+          console.error(`Rate limit exceeded. Try again in ${Math.ceil(timeUntilNext / 1000)} seconds`)
+          setIsLoading(false)
+          return
+        }
+
+        // Upload with compression
+        const uploadResult = await uploadProfilePicture(user.id, profilePicture, {
+          compress: true,
+          compressionOptions: {
+            maxWidth: 800,
+            maxHeight: 800,
+            quality: 0.8,
+            format: 'jpeg'
+          }
+        })
         
         if (uploadResult.success) {
           uploadedImageUrl = uploadResult.url!
