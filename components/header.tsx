@@ -131,19 +131,11 @@ export default function Header() {
                     <p className="text-sm font-medium text-blue-400">
                       {userProfile?.username || "User"}
                     </p>
-                    <p className="text-xs text-cyan-300">@{userProfile?.username || "user"}</p>
                   </div>
                 </div>
               </div>
             )}
             
-            <Button 
-              onClick={() => router.push("/profile")} 
-              className="dedsec-button text-sm px-3"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              Settings
-            </Button>
             
             <Button onClick={handleLogout} className="dedsec-button text-sm px-3">
               <LogOut className="w-4 h-4 mr-2" />
@@ -200,16 +192,6 @@ export default function Header() {
               </Button>
               
               <div className="pt-2 border-t border-blue-400/30 mt-2">
-                <Button 
-                  onClick={() => {
-                    router.push("/profile")
-                    setIsMenuOpen(false)
-                  }}
-                  className="dedsec-button w-full mb-2"
-                >
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
-                </Button>
                 <Button onClick={handleLogout} className="dedsec-button w-full">
                   <LogOut className="w-4 h-4 mr-2" />
                   Logout

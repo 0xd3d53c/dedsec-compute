@@ -101,8 +101,8 @@ export default function Footer() {
         <div className="border-t border-blue-400/30 mt-8 pt-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-cyan-300">
-              © 2024 DedSecCompute. All rights reserved.
-            </p>
+              © {new Date().getFullYear()} DedSec Collective | Distributed under the People's License
+              </p>
             <div className="flex items-center gap-4 text-sm text-cyan-300">
               <span>GDPR Compliant</span>
               <span>•</span>

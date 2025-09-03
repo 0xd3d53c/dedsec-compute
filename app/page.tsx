@@ -189,7 +189,7 @@ export default function HomePage() {
             <p>🌐 Global distributed network</p>
           </div>
 
-          <div className="text-xs text-slate-500 border-t border-blue-400/20 pt-4">
+          <div className="text-xs ext-slate-500 border-t border-btlue-400/20 pt-4">
             <p>© {new Date().getFullYear()} DedSec Collective | Distributed under the People's License</p>
             <p className="font-mono mt-1">"Hack the planet. Share the power."</p>
           </div>
