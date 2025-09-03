@@ -87,12 +87,43 @@ export default function ProfilePage() {
       setDisplayName(profileData.display_name || "")
       setProfilePictureUrl(profileData.profile_picture_url || "")
       setIs2FAEnabled(profileData.two_factor_enabled || false)
+      setBackupCodes(profileData.backup_codes || [])
       setIsLoading(false)
     } catch (error) {
       console.error("[v0] Failed to load profile:", error)
       setMessage({ type: "error", text: "Failed to load profile data" })
       setIsLoading(false)
     }
+  }
+
+  const validateImageFile = (file: File): string | null => {
+    // Check file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png']
+    if (!allowedTypes.includes(file.type)) {
+      return "Only JPG and PNG files are allowed"
+    }
+
+    // Check file size (4MB = 4 * 1024 * 1024 bytes)
+    const maxSize = 4 * 1024 * 1024
+    if (file.size > maxSize) {
+      return "File size must be less than 4MB"
+    }
+
+    return null
+  }
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const validationError = validateImageFile(file)
+    if (validationError) {
+      setMessage({ type: "error", text: validationError })
+      return
+    }
+
+    setProfilePicture(file)
+    setMessage({ type: "success", text: "Image selected successfully" })
   }
 
   const updateProfile = async () => {
@@ -105,11 +136,14 @@ export default function ProfilePage() {
       // Upload profile picture if selected
       if (profilePicture) {
         const fileExt = profilePicture.name.split(".").pop()
-        const fileName = `${profile.id}-${Date.now()}.${fileExt}`
+        const fileName = `${profile.id}/${Date.now()}.${fileExt}`
 
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("profile-pictures")
-          .upload(fileName, profilePicture)
+          .upload(fileName, profilePicture, {
+            cacheControl: '3600',
+            upsert: true
+          })
 
         if (uploadError) throw uploadError
 
@@ -132,6 +166,7 @@ export default function ProfilePage() {
       if (error) throw error
 
       setMessage({ type: "success", text: "Profile updated successfully!" })
+      setProfilePicture(null) // Clear the selected file
       await loadProfile(profile.id)
     } catch (error) {
       console.error("[v0] Failed to update profile:", error)
@@ -166,22 +201,12 @@ export default function ProfilePage() {
       const result = await authManager.verify2FA(profile.id, verificationCode)
 
       if (result.success) {
-        // Generate backup codes
-        const codes = Array.from({ length: 8 }, () => Math.random().toString(36).substring(2, 8).toUpperCase())
-        setBackupCodes(codes)
-        setShowBackupCodes(true)
         setIs2FAEnabled(true)
         setMessage({ type: "success", text: "2FA enabled successfully! Save your backup codes." })
-
-        // Update profile in database
-        await supabase
-          .from("users")
-          .update({
-            two_factor_enabled: true,
-            backup_codes: codes,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", profile.id)
+        
+        // Reload profile to get backup codes
+        await loadProfile(profile.id)
+        setShowBackupCodes(true)
       } else {
         setMessage({ type: "error", text: result.error || "Invalid verification code" })
       }
@@ -195,24 +220,19 @@ export default function ProfilePage() {
     if (!profile) return
 
     try {
-      const { error } = await supabase
-        .from("users")
-        .update({
-          two_factor_enabled: false,
-          two_factor_secret: null,
-          backup_codes: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", profile.id)
+      const result = await authManager.disable2FA(profile.id)
 
-      if (error) throw error
-
-      setIs2FAEnabled(false)
-      setQrCodeUrl("")
-      setTotpSecret("")
-      setBackupCodes([])
-      setShowBackupCodes(false)
-      setMessage({ type: "success", text: "2FA disabled successfully" })
+      if (result.success) {
+        setIs2FAEnabled(false)
+        setQrCodeUrl("")
+        setTotpSecret("")
+        setBackupCodes([])
+        setShowBackupCodes(false)
+        setMessage({ type: "success", text: "2FA disabled successfully" })
+        await loadProfile(profile.id)
+      } else {
+        setMessage({ type: "error", text: result.error || "Failed to disable 2FA" })
+      }
     } catch (error) {
       console.error("[v0] Failed to disable 2FA:", error)
       setMessage({ type: "error", text: "Failed to disable 2FA" })
@@ -334,14 +354,22 @@ export default function ProfilePage() {
                       <Input
                         id="picture"
                         type="file"
-                        accept="image/*"
-                        onChange={(e) => setProfilePicture(e.target.files?.[0] || null)}
+                        accept="image/jpeg,image/jpg,image/png"
+                        onChange={handleImageUpload}
                         className="bg-slate-950 border-cyan-400 text-cyan-400"
                       />
                       <Button size="sm" className="bg-cyan-600 hover:bg-cyan-500">
                         <Upload className="w-4 h-4" />
                       </Button>
                     </div>
+                    <p className="text-xs text-cyan-300">
+                      Supported formats: JPG, PNG. Maximum size: 4MB
+                    </p>
+                    {profilePicture && (
+                      <p className="text-xs text-emerald-400">
+                        Selected: {profilePicture.name} ({(profilePicture.size / 1024 / 1024).toFixed(2)} MB)
+                      </p>
+                    )}
                   </div>
                 </div>
 

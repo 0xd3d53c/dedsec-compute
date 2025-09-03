@@ -1,4 +1,6 @@
 import { createClient } from "./supabase/client"
+import * as speakeasy from 'speakeasy'
+import * as QRCode from 'qrcode'
 
 export interface User2FA {
   id: string
@@ -196,43 +198,101 @@ export class AuthManager {
     }
   }
 
-  async enable2FA(): Promise<AuthResponse> {
+  async enable2FA(userId: string): Promise<{ success: boolean; secret?: string; qrCode?: string; error?: string }> {
     try {
-      // This would integrate with a 2FA service like TOTP
-      // For now, we'll just update the user record
-      const { data: { user } } = await this.supabase.auth.getUser()
-      
-      if (!user) {
-        return { success: false, error: "No user found" }
-      }
+      // Generate a new secret
+      const secret = speakeasy.generateSecret({
+        name: `DedSecCompute (${userId})`,
+        issuer: 'DedSecCompute',
+        length: 32
+      })
 
+      // Generate QR code
+      const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url!)
+
+      // Store the secret in the database (but don't enable 2FA yet)
       const { error } = await this.supabase
         .from("users")
-        .update({ two_factor_enabled: true })
-        .eq("id", user.id)
+        .update({ 
+          two_factor_secret: secret.base32,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", userId)
 
       if (error) {
         return { success: false, error: error.message }
       }
 
-      return { success: true }
+      return { 
+        success: true, 
+        secret: secret.base32, 
+        qrCode: qrCodeUrl 
+      }
     } catch (error) {
-      return { success: false, error: "Failed to enable 2FA" }
+      return { success: false, error: "Failed to setup 2FA" }
     }
   }
 
-  async disable2FA(): Promise<AuthResponse> {
+  async verify2FA(userId: string, token: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { data: { user } } = await this.supabase.auth.getUser()
-      
-      if (!user) {
-        return { success: false, error: "No user found" }
+      // Get the user's 2FA secret
+      const { data: userData, error: userError } = await this.supabase
+        .from("users")
+        .select("two_factor_secret")
+        .eq("id", userId)
+        .single()
+
+      if (userError || !userData.two_factor_secret) {
+        return { success: false, error: "2FA not configured" }
       }
 
+      // Verify the token
+      const verified = speakeasy.totp.verify({
+        secret: userData.two_factor_secret,
+        encoding: 'base32',
+        token: token,
+        window: 2 // Allow 2 time steps before/after current time
+      })
+
+      if (!verified) {
+        return { success: false, error: "Invalid verification code" }
+      }
+
+      // Enable 2FA and generate backup codes
+      const backupCodes = Array.from({ length: 8 }, () => 
+        Math.random().toString(36).substring(2, 8).toUpperCase()
+      )
+
+      const { error: updateError } = await this.supabase
+        .from("users")
+        .update({ 
+          two_factor_enabled: true,
+          backup_codes: backupCodes,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", userId)
+
+      if (updateError) {
+        return { success: false, error: updateError.message }
+      }
+
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: "Failed to verify 2FA code" }
+    }
+  }
+
+  async disable2FA(userId: string): Promise<AuthResponse> {
+    try {
       const { error } = await this.supabase
         .from("users")
-        .update({ two_factor_enabled: false })
-        .eq("id", user.id)
+        .update({ 
+          two_factor_enabled: false,
+          two_factor_secret: null,
+          backup_codes: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", userId)
 
       if (error) {
         return { success: false, error: error.message }

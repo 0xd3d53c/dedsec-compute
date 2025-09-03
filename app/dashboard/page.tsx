@@ -23,6 +23,7 @@ import {
   Pause,
   Eye,
   Share2,
+  User,
 } from "lucide-react"
 import { HardwareMonitor, type ResourceLimits, type RealTimeStats } from "@/lib/hardware-detection"
 import { BackgroundWorker } from "@/lib/background-worker"
@@ -33,6 +34,7 @@ export default function Dashboard() {
   const router = useRouter()
 
   const [user, setUser] = useState<any>(null)
+  const [userProfile, setUserProfile] = useState<any>(null)
   const [sessionRecord, setSessionRecord] = useState<any>(null)
   const [networkStats, setNetworkStats] = useState<any>(null)
   const [operations, setOperations] = useState<any[]>([])
@@ -78,6 +80,7 @@ export default function Dashboard() {
       }
 
       setUser(user)
+      loadUserProfile(user.id)
       loadUserData(user.id)
       loadSocialData(user.id)
       prepareInvite(user.id)
@@ -141,6 +144,20 @@ export default function Dashboard() {
       monitorRef.current = null
     }
   }, [router])
+
+  const loadUserProfile = async (userId: string) => {
+    const supabase = createClient()
+
+    const { data: profile } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .single()
+
+    if (profile) {
+      setUserProfile(profile)
+    }
+  }
 
   const loadUserData = async (userId: string) => {
     const supabase = createClient()
@@ -385,6 +402,37 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
+            {/* User Profile Section */}
+            <div className="flex items-center gap-3 bg-slate-900/50 rounded-lg px-3 py-2 border border-blue-400/30">
+              <div className="flex items-center gap-2">
+                {userProfile?.profile_picture_url ? (
+                  <img
+                    src={userProfile.profile_picture_url}
+                    alt="Profile"
+                    className="w-8 h-8 rounded-full object-cover border border-blue-400/50"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
+                    <User className="w-4 h-4 text-white" />
+                  </div>
+                )}
+                <div className="hidden sm:block">
+                  <p className="text-sm font-medium text-blue-400">
+                    {userProfile?.display_name || userProfile?.username || "User"}
+                  </p>
+                  <p className="text-xs text-cyan-300">@{userProfile?.username || "user"}</p>
+                </div>
+              </div>
+            </div>
+            
+            <Button 
+              onClick={() => router.push("/profile")} 
+              className="dedsec-button text-xs sm:text-sm px-3 sm:px-4"
+            >
+              <Settings className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              Settings
+            </Button>
+            
             <Button onClick={handleLogout} className="dedsec-button text-xs sm:text-sm px-3 sm:px-4">
               <LogOut className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
               Logout

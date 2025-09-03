@@ -227,12 +227,12 @@ export default function SignUpPage() {
               <div>
                 <Label htmlFor="displayName" className="text-blue-400 flex items-center gap-2 text-sm sm:text-base">
                   <Users className="w-4 h-4" />
-                  Display Name
+                  User Name
                 </Label>
                 <Input
                   id="displayName"
                   type="text"
-                  placeholder="Your display name"
+                  placeholder="Your user name"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11"
@@ -249,7 +249,7 @@ export default function SignUpPage() {
                 <Input
                   id="inviteCode"
                   type="text"
-                  placeholder="d3d_XXXXXXX"
+                  placeholder="Your invite code"
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value)}
                   className="bg-slate-950 border-blue-400 text-blue-400 placeholder-blue-600 text-sm sm:text-base h-10 sm:h-11"
