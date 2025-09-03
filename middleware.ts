@@ -1,6 +1,5 @@
 import { updateSession } from "@/lib/supabase/middleware"
 import type { NextRequest } from "next/server"
-import { NextResponse } from "next/server"
 
 export async function middleware(request: NextRequest) {
   // Enhanced security headers for all routes
@@ -23,28 +22,24 @@ export async function middleware(request: NextRequest) {
   const isDev = process.env.NODE_ENV === 'development'
   const csp = [
     "default-src 'self'",
-    isDev
-      ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https://cdn.jsdelivr.net"
-      : "script-src 'self' blob: https://cdn.jsdelivr.net",
+    // Allow unsafe-inline scripts even in production to prevent inline script errors
+    "script-src 'self' 'unsafe-inline' blob: https://cdn.jsdelivr.net",
     "worker-src 'self' blob:",
     "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: https:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co" + (isDev ? " ws://localhost:*" : ""),
+    `connect-src 'self' https://*.supabase.co wss://*.supabase.co${isDev ? " ws://localhost:*" : ""}`,
     "manifest-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'"
   ].join('; ')
-  
+
   response.headers.set('Content-Security-Policy', csp)
-  
-  // Rate limiting headers
+
   const clientIP = request.ip || request.headers.get('x-forwarded-for') || 'unknown'
   response.headers.set('X-Client-IP', clientIP)
-  
-  // Admin route protection is handled by updateSession; no duplicate checks here
-  
+
   return response
 }
 
