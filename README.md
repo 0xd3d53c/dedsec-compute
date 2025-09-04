@@ -57,23 +57,19 @@ A distributed computing platform built with Next.js 14, Supabase, and modern web
    ```
 
 4. **Set up the database**
-   ```bash
-   # Run the SQL scripts in order:
-   # 1. scripts/001_create_database_schema.sql
-   # 2. scripts/002_create_user_trigger.sql
-   # 3. scripts/003_setup_row_level_security.sql
-   # 4. scripts/004_create_admin_functions.sql
-   # 5. scripts/005_create_missions.sql
-   # 6. scripts/007_fix_user_creation.sql
-   # 7. scripts/008_fix_2fa_secret_length.sql
-   # 8. scripts/009_remove_display_name.sql
-   # 9. scripts/010_fix_rls_recursion.sql
-   # 10. scripts/setup-storage.sql
-   # 11. scripts/011_create_compromise_logs.sql
-   # 12. scripts/012_create_worker_heartbeats.sql
-   # 13. scripts/013_create_task_aggregation_functions.sql
-   # 14. scripts/014_create_leaderboard_system.sql
-   # 15. scripts/015_setup_cron_jobs.sql
+   
+   **For NEW Supabase projects:**
+   ```sql
+   -- Run these 3 scripts in order in your Supabase SQL Editor:
+   -- 1. scripts/000_complete_database_setup.sql (main schema)
+   -- 2. scripts/001_rpc_functions.sql (RPC functions)
+   -- 3. scripts/002_setup_storage.sql (storage buckets)
+   ```
+
+   **For EXISTING databases:**
+   ```sql
+   -- If you already have data, run the migration script:
+   -- scripts/016_fix_task_executions_schema.sql
    ```
 
 5. **Start the development server**
