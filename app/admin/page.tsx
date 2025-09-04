@@ -65,50 +65,20 @@ export default function AdminLoginPage() {
         throw new Error("Access denied. Admin privileges required.")
       }
 
-      // Log successful admin login
-      await supabase.from("admin_logs").insert({
-        admin_id: adminData.id,
-        action: "admin_login_success",
-        target_type: "system",
-        target_id: adminData.id,
-        details: {
-          username: adminData.username,
-          admin_level: adminData.admin_level,
-          login_method: "email_password",
-          ip_address: "127.0.0.1", // Will be updated with real IP
-          user_agent: navigator.userAgent
-        },
-        timestamp: new Date().toISOString()
-      })
+      // Log successful login
+      // Note: admin_logs requires service_role access
+      // In production, this should be handled server-side via API routes
 
       // Redirect to admin dashboard
-      router.push("/admin/dashboard")
-
+      router.push('/admin/dashboard')
     } catch (error: any) {
-      console.error("Admin login error:", error)
-      setError(error.message || "Authentication failed")
-      
-      // Log failed login attempt
-      try {
-        const supabase = createClient()
-        await supabase.from("admin_logs").insert({
-          admin_id: null,
-          action: "admin_login_failed",
-          target_type: "system",
-          target_id: null,
-          details: {
-            attempted_email: email.trim().toLowerCase(),
-            error: error.message,
-            ip_address: "127.0.0.1",
-            user_agent: navigator.userAgent
-          },
-          timestamp: new Date().toISOString()
-        })
-      } catch (logError) {
-        console.error("Failed to log failed login:", logError)
-      }
-    } finally {
+      console.error('Login error:', error)
+      setError(error.message)
       setIsLoading(false)
+
+      // Log failed login attempt
+      // Note: admin_logs requires service_role access
+      // In production, this should be handled server-side via API routes
     }
   }
 

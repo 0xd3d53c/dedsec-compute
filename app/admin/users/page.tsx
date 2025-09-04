@@ -223,19 +223,6 @@ export default function AdminUsersPage() {
 
       if (error) throw error
 
-      // Log admin action
-      await supabase.from("admin_logs").insert({
-        admin_id: adminSession.user.id,
-        action: `user_${newStatus ? 'activated' : 'deactivated'}`,
-        target_type: "user",
-        target_id: userId,
-        details: {
-          previous_status: currentStatus,
-          new_status: newStatus,
-          timestamp: new Date().toISOString()
-        }
-      })
-
       toast.success(`User ${newStatus ? 'activated' : 'deactivated'} successfully`)
       fetchUsers()
     } catch (error: any) {
@@ -260,19 +247,6 @@ export default function AdminUsersPage() {
         .eq("id", userId)
 
       if (error) throw error
-
-      // Log admin action
-      await supabase.from("admin_logs").insert({
-        admin_id: adminSession.user.id,
-        action: `user_admin_${newStatus ? 'granted' : 'revoked'}`,
-        target_type: "user",
-        target_id: userId,
-        details: {
-          previous_admin_status: currentStatus,
-          new_admin_status: newStatus,
-          timestamp: new Date().toISOString()
-        }
-      })
 
       toast.success(`Admin privileges ${newStatus ? 'granted' : 'revoked'} successfully`)
       fetchUsers()
@@ -321,17 +295,6 @@ export default function AdminUsersPage() {
         .eq("id", userId)
 
       if (error) throw error
-
-      // Log admin action
-      await supabase.from("admin_logs").insert({
-        admin_id: adminSession.user.id,
-        action: "user_deleted",
-        target_type: "user",
-        target_id: userId,
-        details: {
-          timestamp: new Date().toISOString()
-        }
-      })
 
       toast.success("User deleted successfully")
       fetchUsers()

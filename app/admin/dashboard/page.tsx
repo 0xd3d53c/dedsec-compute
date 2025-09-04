@@ -86,15 +86,16 @@ export default function AdminDashboard() {
         setOperations(opsData || [])
       }
 
-      // Fetch admin logs
-      if (hasPermission("view_logs")) {
-        const { data: logsData } = await supabase
-          .from("admin_logs")
-          .select("*")
-          .order("timestamp", { ascending: false })
-          .limit(20)
-
-        setAdminLogs(logsData || [])
+      // Fetch recent admin logs
+      const fetchRecentLogs = async () => {
+        try {
+          // Note: admin_logs requires service_role access
+          // In production, this should be handled server-side via API routes
+          setRecentLogs([])
+        } catch (error) {
+          console.error('Failed to fetch recent logs:', error)
+          setRecentLogs([])
+        }
       }
 
     } catch (error) {

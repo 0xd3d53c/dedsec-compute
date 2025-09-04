@@ -161,19 +161,6 @@ export default function AdminMissionsPage() {
 
         if (error) throw error
 
-        // Log admin action
-        await supabase.from("admin_logs").insert({
-          admin_id: adminSession.user.id,
-          action: "mission_updated",
-          target_type: "mission",
-          target_id: editingMission.id,
-          details: {
-            previous_data: editingMission,
-            new_data: formData,
-            timestamp: new Date().toISOString()
-          }
-        })
-
         toast.success("Mission updated successfully")
       } else {
         // Create new mission
@@ -185,18 +172,6 @@ export default function AdminMissionsPage() {
           })
 
         if (error) throw error
-
-        // Log admin action
-        await supabase.from("admin_logs").insert({
-          admin_id: adminSession.user.id,
-          action: "mission_created",
-          target_type: "mission",
-          target_id: null,
-          details: {
-            mission_data: formData,
-            timestamp: new Date().toISOString()
-          }
-        })
 
         toast.success("Mission created successfully")
       }
@@ -236,17 +211,6 @@ export default function AdminMissionsPage() {
         .eq("id", missionId)
 
       if (error) throw error
-
-      // Log admin action
-      await supabase.from("admin_logs").insert({
-        admin_id: adminSession.user.id,
-        action: "mission_deleted",
-        target_type: "mission",
-        target_id: missionId,
-        details: {
-          timestamp: new Date().toISOString()
-        }
-      })
 
       toast.success("Mission deleted successfully")
       fetchMissions()
