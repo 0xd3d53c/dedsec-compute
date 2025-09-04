@@ -1,5 +1,5 @@
 import type React from "react"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { JetBrains_Mono, Inter } from "next/font/google"
 import "./globals.css"
 import Header from "@/components/header"
@@ -21,8 +21,6 @@ export const metadata: Metadata = {
   title: "DedSec Compute - Distributed Computing Collective",
   description: "Join the collective and contribute your device's computing power to the network. Participate in missions, earn rewards, and be part of the future of distributed computing.",
   manifest: "/manifest.json",
-  themeColor: "#3b82f6",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -39,6 +37,14 @@ export const metadata: Metadata = {
     title: "DedSec Compute - Distributed Computing Collective",
     description: "Join the collective and contribute your device's computing power to the network.",
   },
+}
+
+export const viewport: Viewport = {
+  themeColor: "#3b82f6",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 }
 
 export default function RootLayout({
