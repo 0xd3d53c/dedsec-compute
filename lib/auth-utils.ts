@@ -219,16 +219,38 @@ export class AuthManager {
 
   async enable2FA(userId: string): Promise<{ success: boolean; secret?: string; qrCode?: string; error?: string }> {
     try {
-      // Generate a new secret using speakeasy v2.0.0 API
+      console.log('Starting 2FA setup for user:', userId)
+      
+      // Generate a new secret using speakeasy
       const secret = speakeasy.generateSecret({
-        name: `DedSecCompute (${userId})`,
+        name: `DedSecCompute`,
         issuer: 'DedSecCompute',
-        length: 20, // Shorter length to fit in 32 char limit
+        length: 32, // Standard length
         symbols: false // Ensure no special characters that might cause issues
       })
 
+      console.log('Generated secret:', secret.base32)
+
+      if (!secret.base32) {
+        return { success: false, error: "Failed to generate 2FA secret" }
+      }
+
       // Generate QR code
-      const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url!)
+      let qrCodeUrl: string
+      try {
+        qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url!, {
+          width: 200,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        })
+        console.log('Generated QR code successfully')
+      } catch (qrError) {
+        console.error('QR code generation error:', qrError)
+        return { success: false, error: "Failed to generate QR code" }
+      }
 
       // Store the secret in the database (but don't enable 2FA yet)
       const { error } = await this.supabase
@@ -240,8 +262,11 @@ export class AuthManager {
         .eq("id", userId)
 
       if (error) {
-        return { success: false, error: error.message }
+        console.error('Database update error:', error)
+        return { success: false, error: `Database error: ${error.message}` }
       }
+
+      console.log('2FA setup completed successfully')
 
       return { 
         success: true, 
@@ -249,7 +274,11 @@ export class AuthManager {
         qrCode: qrCodeUrl 
       }
     } catch (error) {
-      return { success: false, error: "Failed to setup 2FA" }
+      console.error('2FA setup error:', error)
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : "Failed to setup 2FA" 
+      }
     }
   }
 

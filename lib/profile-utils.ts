@@ -263,15 +263,40 @@ export async function uploadProfilePicture(
       try {
         fileToUpload = await compressImage(file, options.compressionOptions)
         console.log('Image compressed successfully')
+        options.onProgress?.(25) // 25% progress after compression
       } catch (error) {
         console.warn('Image compression failed, using original file:', error)
         // Continue with original file if compression fails
         fileToUpload = file
+        options.onProgress?.(10) // 10% progress even if compression fails
       }
+    } else {
+      options.onProgress?.(10) // 10% progress if no compression
     }
 
     // Generate consistent file name
     const fileName = generateProfilePictureFileName(userId, fileToUpload)
+    console.log('Uploading file:', fileName)
+
+    // Check if bucket exists and is accessible
+    const { data: buckets, error: bucketError } = await supabase.storage.listBuckets()
+    if (bucketError) {
+      console.error('Error listing buckets:', bucketError)
+      return {
+        success: false,
+        error: `Storage error: ${bucketError.message}`
+      }
+    }
+
+    const profilePicturesBucket = buckets.find(bucket => bucket.id === 'profile-pictures')
+    if (!profilePicturesBucket) {
+      return {
+        success: false,
+        error: 'Profile pictures storage bucket not found. Please contact support.'
+      }
+    }
+
+    options.onProgress?.(30) // 30% progress before upload
 
     // Upload to storage with progress tracking
     const { data: uploadData, error: uploadError } = await supabase.storage
@@ -282,22 +307,35 @@ export async function uploadProfilePicture(
       })
 
     if (uploadError) {
+      console.error('Upload error:', uploadError)
       return {
         success: false,
-        error: uploadError.message
+        error: `Upload failed: ${uploadError.message}`
       }
     }
+
+    options.onProgress?.(80) // 80% progress after upload
 
     // Get public URL
     const {
       data: { publicUrl },
     } = supabase.storage.from("profile-pictures").getPublicUrl(fileName)
 
+    if (!publicUrl) {
+      return {
+        success: false,
+        error: 'Failed to generate public URL for uploaded image'
+      }
+    }
+
+    options.onProgress?.(100) // 100% progress
+
     return {
       success: true,
       url: publicUrl
     }
   } catch (error) {
+    console.error('Upload error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Upload failed"
@@ -324,6 +362,7 @@ export async function updateUserProfilePicture(
       .eq("id", userId)
 
     if (error) {
+      console.error('Database update error:', error)
       return {
         success: false,
         error: error.message
@@ -332,6 +371,7 @@ export async function updateUserProfilePicture(
 
     return { success: true }
   } catch (error) {
+    console.error('Database update error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Database update failed"

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { User, Shield, Key, Smartphone, Save, Upload, Copy, CheckCircle, AlertTriangle } from "lucide-react"
+import { User, Shield, Key, Smartphone, Save, Upload, Copy, CheckCircle, AlertTriangle, X } from "lucide-react"
 import { authManager } from "@/lib/auth-utils"
 import { 
   validateProfilePictureFile, 
@@ -154,6 +154,9 @@ export default function ProfilePage() {
           maxHeight: 800,
           quality: 0.8,
           format: 'jpeg'
+        },
+        onProgress: (progress) => {
+          uploadProgress.updateProgress(progress)
         }
       })
       
@@ -174,6 +177,10 @@ export default function ProfilePage() {
 
       // Update local state immediately (no need to reload from database)
       setProfilePictureUrl(uploadResult.url!)
+      setProfile(prev => prev ? {
+        ...prev,
+        profile_picture_url: uploadResult.url!
+      } : null)
       setMessage({ type: "success", text: "Profile picture updated successfully!" })
       uploadProgress.endUpload(true, "Upload successful!")
     } catch (error) {
@@ -354,13 +361,6 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-cyan-400">
-      <UploadProgress
-        isVisible={uploadProgress.isVisible}
-        progress={uploadProgress.progress}
-        status={uploadProgress.status}
-        message={uploadProgress.message}
-        onClose={uploadProgress.hide}
-      />
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-cyan-400" style={{ textShadow: "0 0 10px currentColor" }}>
@@ -407,6 +407,45 @@ export default function ProfilePage() {
                 <CardDescription className="text-cyan-300">Update your profile details and picture</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Upload Progress Bar */}
+                {uploadProgress.isVisible && (
+                  <div className="bg-slate-900/50 border border-cyan-400/30 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Upload className="h-4 w-4 text-cyan-400" />
+                        <span className="text-sm font-medium text-cyan-400">
+                          {uploadProgress.status === 'uploading' && 'Uploading...'}
+                          {uploadProgress.status === 'success' && 'Upload Complete'}
+                          {uploadProgress.status === 'error' && 'Upload Failed'}
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={uploadProgress.hide}
+                        className="h-6 w-6 p-0 hover:bg-transparent"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    
+                    {uploadProgress.status === 'uploading' && (
+                      <div className="w-full bg-slate-800 rounded-full h-2 mb-2">
+                        <div
+                          className="bg-cyan-400 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress.progress}%` }}
+                        />
+                      </div>
+                    )}
+                    
+                    {uploadProgress.message && (
+                      <p className="text-xs text-cyan-300">
+                        {uploadProgress.message}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex items-center gap-6">
                   <Avatar className="w-24 h-24">
                     <AvatarImage src={profilePictureUrl || "/placeholder.svg"} />

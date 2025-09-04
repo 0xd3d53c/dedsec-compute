@@ -30,6 +30,30 @@ export default function Header() {
       }
     }
     loadUserProfile()
+
+    // Set up real-time subscription for profile updates
+    if (user && isValid) {
+      const channel = supabase
+        .channel('profile-updates')
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'users',
+            filter: `id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('Profile updated:', payload.new)
+            setUserProfile(payload.new as any)
+          }
+        )
+        .subscribe()
+
+      return () => {
+        channel.unsubscribe()
+      }
+    }
   }, [user, isValid])
 
   const handleLogout = async () => {
