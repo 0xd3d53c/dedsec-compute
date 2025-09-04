@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const supabase = createClient()
     
     // Call the scheduled maintenance function
-    const { data, error } = await supabase.rpc('scheduled_maintenance')
+    const { data, error } = await (await supabase).rpc('scheduled_maintenance')
 
     if (error) {
       console.error('Database maintenance error:', error)

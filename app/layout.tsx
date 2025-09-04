@@ -18,9 +18,27 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "DedSecCompute - Distributed Computing Network",
-  description: "Join the collective. Contribute your computing power to the network.",
-  generator: "DedSecCompute",
+  title: "DedSec Compute - Distributed Computing Collective",
+  description: "Join the collective and contribute your device's computing power to the network. Participate in missions, earn rewards, and be part of the future of distributed computing.",
+  manifest: "/manifest.json",
+  themeColor: "#3b82f6",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "DedSec Compute"
+  },
+  openGraph: {
+    title: "DedSec Compute - Distributed Computing Collective",
+    description: "Join the collective and contribute your device's computing power to the network.",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "DedSec Compute - Distributed Computing Collective",
+    description: "Join the collective and contribute your device's computing power to the network.",
+  },
 }
 
 export default function RootLayout({

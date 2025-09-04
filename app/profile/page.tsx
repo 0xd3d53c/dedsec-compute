@@ -10,18 +10,16 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { User, Shield, Key, Smartphone, Save, Upload, Copy, CheckCircle, AlertTriangle, X } from "lucide-react"
+import { User, Shield, Key, Smartphone, Save, Copy, CheckCircle, AlertTriangle } from "lucide-react"
 import { authManager } from "@/lib/auth-utils"
 import { 
   validateProfilePictureFile, 
-  uploadProfilePicture, 
-  updateUserProfilePicture,
-  getAvatarFallback,
-  uploadRateLimiter,
-  compressImage
+  getAvatarFallback
 } from "@/lib/profile-utils"
-import { sanitizeUsername, sanitizeText } from "@/lib/security-utils"
-import { UploadProgress, useUploadProgress } from "@/components/upload-progress"
+import { sanitizeUsername } from "@/lib/security-utils"
+import { uploadFileWithTUS, generateFileName } from "@/lib/tus-upload"
+
+
 
 interface UserProfile {
   id: string
@@ -53,20 +51,32 @@ export default function ProfilePage() {
   const [verificationCode, setVerificationCode] = useState("")
   const [backupCodes, setBackupCodes] = useState<string[]>([])
   const [showBackupCodes, setShowBackupCodes] = useState(false)
-
+  // Upload state
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   // Password change state
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
 
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
-  const uploadProgress = useUploadProgress()
 
   const supabase = createClient()
+
+
 
   useEffect(() => {
     checkAuth()
   }, [])
+
+  // Effect to manage profile picture URL state
+  useEffect(() => {
+    if (profile?.profile_picture_url && profile.profile_picture_url.trim() !== "") {
+      setProfilePictureUrl(profile.profile_picture_url)
+    } else {
+      setProfilePictureUrl("")
+    }
+  }, [profile?.profile_picture_url])
 
   const checkAuth = async () => {
     try {
@@ -96,7 +106,6 @@ export default function ProfilePage() {
 
       setProfile(profileData)
       setUsername(profileData.username || "")
-      setProfilePictureUrl(profileData.profile_picture_url || "")
       setIs2FAEnabled(profileData.two_factor_enabled || false)
       setBackupCodes(profileData.backup_codes || [])
       setIsLoading(false)
@@ -107,126 +116,95 @@ export default function ProfilePage() {
     }
   }
 
-  // File validation is now handled by the shared utility
-
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) {
-      setMessage({ type: "error", text: "Please select a file to upload" })
-      uploadProgress.endUpload(false, "No file selected")
-      return
-    }
+    if (!file) return
 
-    if (!profile) {
-      setMessage({ type: "error", text: "Profile not loaded. Please refresh the page and try again." })
-      uploadProgress.endUpload(false, "Profile not loaded")
-      return
-    }
-
-    // Validate file before upload
     const validation = validateProfilePictureFile(file)
     if (!validation.isValid) {
-      setMessage({ type: "error", text: validation.error || "Invalid file format or size. Please use JPG, PNG, or WebP files under 4MB." })
-      uploadProgress.endUpload(false, validation.error || "Invalid file format or size")
+      setMessage({ type: "error", text: validation.error || "Invalid file format or size" })
       return
     }
 
-    // Check rate limiting
-    if (!uploadRateLimiter.canUpload(profile.id)) {
-      const timeUntilNext = uploadRateLimiter.getTimeUntilNextUpload(profile.id)
-      setMessage({ 
-        type: "error", 
-        text: `Upload rate limit exceeded. Please wait ${Math.ceil(timeUntilNext / 1000)} seconds before trying again.` 
-      })
-      uploadProgress.endUpload(false, `Rate limit exceeded. Please wait ${Math.ceil(timeUntilNext / 1000)} seconds.`)
-      return
-    }
-
-    setIsSaving(true)
-    uploadProgress.startUpload("Uploading profile picture...")
+    // Set the file and start upload
+    setProfilePicture(file)
+    setMessage({ type: "success", text: "Image selected, starting upload..." })
     
-    try {
-      // Upload profile picture with compression using shared utility
-      const uploadResult = await uploadProfilePicture(profile.id, file, {
-        compress: true,
-        compressionOptions: {
-          maxWidth: 800,
-          maxHeight: 800,
-          quality: 0.8,
-          format: 'jpeg'
-        },
-        onProgress: (progress) => {
-          uploadProgress.updateProgress(progress)
-        }
-      })
-      
-      if (!uploadResult.success) {
-        setMessage({ type: "error", text: uploadResult.error || "Upload failed. Please check your connection and try again." })
-        uploadProgress.endUpload(false, uploadResult.error || "Upload failed")
-        return
-      }
-
-      // Update database with new URL
-      const updateResult = await updateUserProfilePicture(profile.id, uploadResult.url!)
-      
-      if (!updateResult.success) {
-        setMessage({ type: "error", text: updateResult.error || "Database update failed. Please check your connection and try again." })
-        uploadProgress.endUpload(false, updateResult.error || "Database update failed")
-        return
-      }
-
-      // Update local state immediately (no need to reload from database)
-      setProfilePictureUrl(uploadResult.url!)
-      setProfile(prev => prev ? {
-        ...prev,
-        profile_picture_url: uploadResult.url!
-      } : null)
-      setMessage({ type: "success", text: "Profile picture updated successfully!" })
-      uploadProgress.endUpload(true, "Upload successful!")
-    } catch (error) {
-      console.error("Failed to upload profile picture:", error)
-      setMessage({ type: "error", text: "Failed to upload profile picture. Please check your connection and try again." })
-      uploadProgress.endUpload(false, "Upload failed!")
-    }
-    setIsSaving(false)
+    // Start automatic upload
+    await uploadProfilePicture(file)
   }
 
-  const updateProfile = async () => {
+  const uploadProfilePicture = async (file: File) => {
     if (!profile) {
-      setMessage({ type: "error", text: "Profile not loaded. Please refresh the page." })
+      setMessage({ type: "error", text: "Profile not loaded. Please refresh the page and try again." })
       return
     }
 
-    setIsSaving(true)
+    setIsUploading(true)
+    setUploadProgress(0)
+    
     try {
-      // Sanitize user input
-      const sanitizedUsername = sanitizeUsername(username)
+      const fileName = generateFileName(profile.id, file.name)
+      
+      const result = await uploadFileWithTUS({
+        bucketName: 'profile-pictures',
+        fileName: fileName,
+        file: file,
+        onProgress: (percentage: number) => {
+          setUploadProgress(percentage)
+        },
+        onSuccess: (url: string) => {
+          setProfilePictureUrl(url)
+          setProfile(prev => prev ? {
+            ...prev,
+            profile_picture_url: url
+          } : null)
+          
+          // Update the database to persist the profile picture URL
+          updateProfilePictureInDatabase(url)
+          
+          setMessage({ type: "success", text: "Profile picture uploaded successfully!" })
+        },
+        onError: (error: any) => {
+          console.error('Upload error:', error)
+          setMessage({ type: "error", text: "Upload failed. Please try again." })
+        }
+      })
 
+      if (!result.success) {
+        setMessage({ type: "error", text: result.error || "Upload failed" })
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      setMessage({ type: "error", text: "Upload failed. Please try again." })
+    } finally {
+      setIsUploading(false)
+      setUploadProgress(0)
+    }
+  }
+  const updateProfilePictureInDatabase = async (imageUrl: string) => {
+    if (!profile) return
+
+    try {
       const { error } = await supabase
         .from("users")
         .update({
-          username: sanitizedUsername.sanitized,
+          profile_picture_url: imageUrl,
           updated_at: new Date().toISOString(),
         })
         .eq("id", profile.id)
 
-      if (error) throw error
-
-      // Update local state with sanitized values
-      setUsername(sanitizedUsername.sanitized)
-      setProfile(prev => prev ? {
-        ...prev,
-        username: sanitizedUsername.sanitized
-      } : null)
-
-      setMessage({ type: "success", text: "Profile updated successfully!" })
+      if (error) {
+        console.error("Failed to update profile picture in database:", error)
+        setMessage({ type: "error", text: "Profile picture uploaded but failed to save to database. Please refresh and try again." })
+      } else {
+        console.log("Profile picture URL saved to database successfully")
+      }
     } catch (error) {
-      console.error("[v0] Failed to update profile:", error)
-      setMessage({ type: "error", text: "Failed to update profile. Please check your input and try again." })
+      console.error("Error updating profile picture in database:", error)
     }
-    setIsSaving(false)
   }
-
+  
   const setup2FA = async () => {
     if (!profile) {
       setMessage({ type: "error", text: "Profile not loaded. Please refresh the page and try again." })
@@ -359,6 +337,10 @@ export default function ProfilePage() {
     )
   }
 
+  function updateProfile(event: React.MouseEvent<HTMLButtonElement>): void {
+    throw new Error("Function not implemented.")
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-cyan-400">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -407,48 +389,14 @@ export default function ProfilePage() {
                 <CardDescription className="text-cyan-300">Update your profile details and picture</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Upload Progress Bar */}
-                {uploadProgress.isVisible && (
-                  <div className="bg-slate-900/50 border border-cyan-400/30 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Upload className="h-4 w-4 text-cyan-400" />
-                        <span className="text-sm font-medium text-cyan-400">
-                          {uploadProgress.status === 'uploading' && 'Uploading...'}
-                          {uploadProgress.status === 'success' && 'Upload Complete'}
-                          {uploadProgress.status === 'error' && 'Upload Failed'}
-                        </span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={uploadProgress.hide}
-                        className="h-6 w-6 p-0 hover:bg-transparent"
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                    
-                    {uploadProgress.status === 'uploading' && (
-                      <div className="w-full bg-slate-800 rounded-full h-2 mb-2">
-                        <div
-                          className="bg-cyan-400 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${uploadProgress.progress}%` }}
-                        />
-                      </div>
-                    )}
-                    
-                    {uploadProgress.message && (
-                      <p className="text-xs text-cyan-300">
-                        {uploadProgress.message}
-                      </p>
-                    )}
-                  </div>
-                )}
 
                 <div className="flex items-center gap-6">
                   <Avatar className="w-24 h-24">
-                    <AvatarImage src={profilePictureUrl || "/placeholder.svg"} />
+                    <AvatarImage 
+                      src={profilePictureUrl} 
+                      alt="Profile picture"
+                      showLoadingState={false} // Disable loading state to prevent infinite spinner
+                    />
                     <AvatarFallback className="text-2xl">{getAvatarFallback(profile?.username)}</AvatarFallback>
                   </Avatar>
                   <div className="space-y-2">
@@ -469,6 +417,22 @@ export default function ProfilePage() {
                       <p className="text-xs text-emerald-400">
                         Selected: {profilePicture.name} ({(profilePicture.size / 1024 / 1024).toFixed(2)} MB)
                       </p>
+                    )}
+                    
+                    {/* Upload Progress */}
+                    {isUploading && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-cyan-400">Uploading...</span>
+                          <span className="text-cyan-300">{uploadProgress.toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full bg-slate-800 rounded-full h-2">
+                          <div
+                            className="bg-cyan-400 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -712,3 +676,4 @@ export default function ProfilePage() {
     </div>
   )
 }
+

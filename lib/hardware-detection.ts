@@ -566,14 +566,32 @@ export class HardwareMonitor {
       if (gl && 'getExtension' in gl) {
         const debugInfo = (gl as any).getExtension('WEBGL_debug_renderer_info')
         if (debugInfo) {
-          return (gl as any).getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+          const vendor = (gl as any).getParameter(debugInfo.UNMASKED_VENDOR_WEBGL)
+          const renderer = (gl as any).getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+          
+          // Store GPU info for later use
+          this.gpuVendor = vendor
+          this.gpuRenderer = renderer
+          
+          return renderer || 'WebGL Supported'
         }
-        return 'WebGL Supported'
+        return 'WebGL Supported (No Debug Info)'
       }
       return 'WebGL Not Supported'
     } catch (e) {
       return 'GPU Detection Failed'
     }
+  }
+
+  private gpuVendor: string = 'Unknown'
+  private gpuRenderer: string = 'Unknown'
+
+  private detectGPUVendor(): string {
+    return this.gpuVendor
+  }
+
+  private detectGPURenderer(): string {
+    return this.gpuRenderer
   }
 
   private detectNetworkType(): string {

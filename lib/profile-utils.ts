@@ -2,6 +2,51 @@
 import { createClient } from "@/lib/supabase/client"
 import { sanitizeText } from "@/lib/security-utils"
 
+/**
+ * Creates the profile-pictures storage bucket if it doesn't exist
+ * Note: This requires admin privileges in Supabase
+ */
+export async function ensureProfilePicturesBucket(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createClient()
+    
+    // Check if bucket already exists
+    const { data: buckets, error: bucketError } = await supabase.storage.listBuckets()
+    if (bucketError) {
+      return {
+        success: false,
+        error: `Failed to list buckets: ${bucketError.message}`
+      }
+    }
+
+    const profilePicturesBucket = buckets.find(bucket => bucket.id === 'profile-pictures')
+    if (profilePicturesBucket) {
+      return { success: true } // Bucket already exists
+    }
+
+    // Try to create the bucket
+    const { data, error } = await supabase.storage.createBucket('profile-pictures', {
+      public: true,
+      fileSizeLimit: 4194304, // 4MB
+      allowedMimeTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    })
+
+    if (error) {
+      return {
+        success: false,
+        error: `Failed to create bucket: ${error.message}. Please create it manually in the Supabase dashboard.`
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    }
+  }
+}
+
 export interface ProfilePictureUploadResult {
   success: boolean
   url?: string
@@ -290,9 +335,10 @@ export async function uploadProfilePicture(
 
     const profilePicturesBucket = buckets.find(bucket => bucket.id === 'profile-pictures')
     if (!profilePicturesBucket) {
+      console.error('Profile pictures bucket not found. Available buckets:', buckets.map(b => b.id))
       return {
         success: false,
-        error: 'Profile pictures storage bucket not found. Please contact support.'
+        error: 'Profile pictures storage bucket not found. Please create a storage bucket named "profile-pictures" in your Supabase dashboard under Storage section, or contact support.'
       }
     }
 

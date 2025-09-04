@@ -10,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import PWAInstaller from "@/components/pwa-installer"
+import RealTimeMonitor from "@/components/real-time-monitor"
 import {
   Shield,
   Users,
@@ -72,35 +74,40 @@ export default function Dashboard() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      try {
+        const supabase = createClient()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
 
-      if (!user) {
+        if (!user) {
+          router.push("/auth/login")
+          return
+        }
+
+        setUser(user)
+        await loadUserProfile(user.id)
+        await loadUserData(user.id)
+        await loadSocialData(user.id)
+        await loadMyMissions(user.id)
+        await prepareInvite(user.id)
+        await loadConsent(user.id)
+        await loadTaskAnalytics(user.id)
+
+        // Block contribution if compromised
+        const compromise = detectCompromise()
+        if (compromise.isSuspected) {
+          setIsContributing(false)
+
+          // Log compromise detection
+          await logCompromiseEvent(user.id, compromise, {
+            dashboardAccess: true,
+            contributionBlocked: true
+          })
+        }
+      } catch (error) {
+        console.error("Error during authentication check:", error)
         router.push("/auth/login")
-        return
-      }
-
-      setUser(user)
-      loadUserProfile(user.id)
-      loadUserData(user.id)
-      loadSocialData(user.id)
-      loadMyMissions(user.id)
-      prepareInvite(user.id)
-      loadConsent(user.id)
-      loadTaskAnalytics(user.id)
-
-      // Block contribution if compromised
-      const compromise = detectCompromise()
-      if (compromise.isSuspected) {
-        setIsContributing(false)
-        
-        // Log compromise detection
-        await logCompromiseEvent(user.id, compromise, {
-          dashboardAccess: true,
-          contributionBlocked: true
-        })
       }
     }
     checkAuth()
@@ -108,53 +115,69 @@ export default function Dashboard() {
     loadNetworkData()
 
     // Initialize hardware monitor for live stats
-    const limits: ResourceLimits = {
-      max_cpu_percent: 100,
-      max_memory_mb: 16384,
-      only_when_charging: false,
-      only_when_idle: false,
-      temperature_threshold: 85,
-      max_battery_drain_percent: 100,
-    }
-    const monitor = new HardwareMonitor(limits)
-    monitor.onStatsUpdate((stats: RealTimeStats) => {
-      setRealTimeStats({
-        cpuUsage: Math.round(stats.cpu_usage),
-        memoryUsage: Math.round(stats.memory_usage),
-        temperature: Math.round(stats.temperature || 0),
-        batteryLevel: Math.round(stats.battery_level || 0),
-        isCharging: !!stats.is_charging,
+    try {
+      const limits: ResourceLimits = {
+        max_cpu_percent: 100,
+        max_memory_mb: 16384,
+        only_when_charging: false,
+        only_when_idle: false,
+        temperature_threshold: 85,
+        max_battery_drain_percent: 100,
+      }
+      const monitor = new HardwareMonitor(limits)
+      monitor.onStatsUpdate((stats: RealTimeStats) => {
+        setRealTimeStats({
+          cpuUsage: Math.round(stats.cpu_usage),
+          memoryUsage: Math.round(stats.memory_usage),
+          temperature: Math.round(stats.temperature || 0),
+          batteryLevel: Math.round(stats.battery_level || 0),
+          isCharging: !!stats.is_charging,
+        })
       })
-    })
-    monitor.startMonitoring(2000)
-    monitorRef.current = monitor
+      monitor.startMonitoring(2000)
+      monitorRef.current = monitor
 
-    // Capture stable device info once
-    monitor.detectEnhancedHardware().then((info) => {
-      // Get actual device memory from browser if available
-      const actualMemory = (navigator as any).deviceMemory || info.total_memory_gb
-      setDeviceInfo({ cpu_cores: info.cpu_cores, total_memory_gb: actualMemory })
-    })
+      // Capture stable device info once
+      monitor.detectEnhancedHardware().then((info) => {
+        // Get actual device memory from browser if available
+        const actualMemory = (navigator as any).deviceMemory || info.total_memory_gb
+        setDeviceInfo({ cpu_cores: info.cpu_cores, total_memory_gb: actualMemory })
+      }).catch((error) => {
+        console.error("Failed to detect hardware:", error)
+        setDeviceInfo({ cpu_cores: 0, total_memory_gb: 0 })
+      })
+    } catch (error) {
+      console.error("Failed to initialize hardware monitor:", error)
+    }
 
     const interval = setInterval(() => {
       loadNetworkData()
     }, 20000)
 
     // realtime subscriptions
-    const supabase = createClient()
-    const channel = supabase
-      .channel("dashboard_rt")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "network_metrics" }, () => loadNetworkData())
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "user_sessions" }, (payload) => {
-        if (user && payload.new && payload.new.user_id === user.id) loadUserData(user.id)
-      })
-      .subscribe()
+    let channel: any = null
+    try {
+      const supabase = createClient()
+      channel = supabase
+        .channel("dashboard_rt")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "network_metrics" }, () => loadNetworkData())
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "user_sessions" }, (payload) => {
+          if (user && payload.new && payload.new.user_id === user.id) loadUserData(user.id)
+        })
+        .subscribe()
+    } catch (error) {
+      console.error("Failed to setup realtime subscriptions:", error)
+    }
 
     return () => {
       clearInterval(interval)
-      channel.unsubscribe()
-      monitorRef.current?.stopMonitoring()
-      monitorRef.current = null
+      if (channel) {
+        channel.unsubscribe()
+      }
+      if (monitorRef.current) {
+        monitorRef.current.stopMonitoring()
+        monitorRef.current = null
+      }
     }
   }, [router])
 
@@ -282,9 +305,9 @@ export default function Dashboard() {
 
     // Rank by number of completed tasks (client-side aggregation)
     const counts: Record<string, number> = {}
-    ;(tasks || []).forEach((t: any) => {
-      if (t.status === "completed") counts[t.user_id] = (counts[t.user_id] || 0) + 1
-    })
+      ; (tasks || []).forEach((t: any) => {
+        if (t.status === "completed") counts[t.user_id] = (counts[t.user_id] || 0) + 1
+      })
     const sorted = Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
       .map(([uid]) => uid)
@@ -342,12 +365,12 @@ export default function Dashboard() {
       try {
         await navigator.share({ title: "DedSecCompute", text, url: shareLink })
         return
-      } catch {}
+      } catch { }
     }
     try {
       await navigator.clipboard.writeText(shareLink)
       alert("Invite link copied to clipboard")
-    } catch {}
+    } catch { }
   }
 
   const toggleContribution = async () => {
@@ -468,6 +491,11 @@ export default function Dashboard() {
           <p className="text-sm sm:text-base text-cyan-300">Monitor your contribution to the network</p>
         </div>
 
+        {/* PWA Installer */}
+        <div className="mb-6">
+          <PWAInstaller />
+        </div>
+
         {/* Status Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
           <Card className="dedsec-border bg-slate-950/80">
@@ -572,106 +600,110 @@ export default function Dashboard() {
           </TabsList>
 
           <TabsContent value="monitor">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Contribution Control */}
-              <Card className="dedsec-border bg-slate-950/80">
-                <CardHeader>
-                  <CardTitle className="text-blue-400 flex items-center gap-2">
-                    <Activity className="w-5 h-5" />
-                    Contribution Status
-                  </CardTitle>
-                  <CardDescription className="text-cyan-300">
-                    Control your device's participation in the network
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-bold text-blue-400">{isContributing ? "Contributing" : "Paused"}</h4>
-                      <p className="text-sm text-cyan-300">
-                        {isContributing ? "Your device is actively contributing" : "Contribution is paused"}
-                      </p>
-                    </div>
-                    <Button
-                      onClick={toggleContribution}
-                      className={isContributing ? "bg-orange-600 hover:bg-orange-500" : "dedsec-button"}
-                    >
-                      {isContributing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                    </Button>
-                  </div>
+            <div className="space-y-6">
+              {/* Real-Time Hardware Monitor */}
+              <RealTimeMonitor userId={user?.id} />
 
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-cyan-300">CPU Usage:</span>
-                      <div className="text-blue-400 font-bold">{realTimeStats.cpuUsage}%</div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Contribution Control */}
+                <Card className="dedsec-border bg-slate-950/80">
+                  <CardHeader>
+                    <CardTitle className="text-blue-400 flex items-center gap-2">
+                      <Activity className="w-5 h-5" />
+                      Contribution Status
+                    </CardTitle>
+                    <CardDescription className="text-cyan-300">
+                      Control your device's participation in the network
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-blue-400">{isContributing ? "Contributing" : "Paused"}</h4>
+                        <p className="text-sm text-cyan-300">
+                          {isContributing ? "Your device is actively contributing" : "Contribution is paused"}
+                        </p>
+                      </div>
+                      <Button
+                        onClick={toggleContribution}
+                        className={isContributing ? "bg-orange-600 hover:bg-orange-500" : "dedsec-button"}
+                      >
+                        {isContributing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                      </Button>
                     </div>
-                    <div>
-                      <span className="text-cyan-300">Memory:</span>
-                      <div className="text-blue-400 font-bold">{realTimeStats.memoryUsage}%</div>
-                    </div>
-                    <div>
-                      <span className="text-cyan-300">Temperature:</span>
-                      <div className="text-orange-400 font-bold">{realTimeStats.temperature}°C</div>
-                    </div>
-                    <div>
-                      <span className="text-cyan-300">Battery:</span>
-                      <div className="text-blue-400 font-bold">
-                        {realTimeStats.batteryLevel}% {realTimeStats.isCharging ? "⚡" : "🔋"}
+
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-cyan-300">CPU Usage:</span>
+                        <div className="text-blue-400 font-bold">{realTimeStats.cpuUsage}%</div>
+                      </div>
+                      <div>
+                        <span className="text-cyan-300">Memory:</span>
+                        <div className="text-blue-400 font-bold">{realTimeStats.memoryUsage}%</div>
+                      </div>
+                      <div>
+                        <span className="text-cyan-300">Temperature:</span>
+                        <div className="text-orange-400 font-bold">{realTimeStats.temperature}°C</div>
+                      </div>
+                      <div>
+                        <span className="text-cyan-300">Battery:</span>
+                        <div className="text-blue-400 font-bold">
+                          {realTimeStats.batteryLevel}% {realTimeStats.isCharging ? "⚡" : "🔋"}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              {/* Network Efficiency */}
-              <Card className="dedsec-border bg-slate-950/80">
-                <CardHeader>
-                  <CardTitle className="text-blue-400">Network Efficiency</CardTitle>
-                  <CardDescription className="text-cyan-300">Real-time network performance metrics</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-cyan-300">Overall Efficiency</span>
-                      <span className="text-blue-400">
-                        {networkStats?.operations_per_second
-                          ? Math.min(
+                {/* Network Efficiency */}
+                <Card className="dedsec-border bg-slate-950/80">
+                  <CardHeader>
+                    <CardTitle className="text-blue-400">Network Efficiency</CardTitle>
+                    <CardDescription className="text-cyan-300">Real-time network performance metrics</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="text-cyan-300">Overall Efficiency</span>
+                        <span className="text-blue-400">
+                          {networkStats?.operations_per_second
+                            ? Math.min(
                               100,
                               Math.floor(((networkStats.operations_per_second || 0) / (networkStats.total_cpu_cores || 1)) * 100),
                             )
-                          : 0}
-                        %
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-800 rounded-full h-2">
-                      <div
-                        className="bg-blue-400 h-2 rounded-full transition-all duration-1000"
-                        style={{
-                          width: `${
-                            networkStats?.operations_per_second
-                              ? Math.min(
+                            : 0}
+                          %
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-2">
+                        <div
+                          className="bg-blue-400 h-2 rounded-full transition-all duration-1000"
+                          style={{
+                            width: `${networkStats?.operations_per_second
+                                ? Math.min(
                                   100,
                                   Math.floor(((networkStats.operations_per_second || 0) / (networkStats.total_cpu_cores || 1)) * 100),
                                 )
-                              : 0
-                          }%`,
-                        }}
-                      ></div>
+                                : 0
+                              }%`,
+                          }}
+                        ></div>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-cyan-300">Average Latency</span>
-                      <div className="text-blue-400 font-bold">{networkStats?.average_latency_ms ?? 0}ms</div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-cyan-300">Average Latency</span>
+                        <div className="text-blue-400 font-bold">{networkStats?.average_latency_ms ?? 0}ms</div>
+                      </div>
+                      <div>
+                        <span className="text-cyan-300">Network Status</span>
+                        <div className="text-blue-400 font-bold">Online</div>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-cyan-300">Network Status</span>
-                      <div className="text-blue-400 font-bold">Online</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </TabsContent>
 
@@ -768,8 +800,8 @@ export default function Dashboard() {
                   )}
 
                   <div className="pt-4 border-t border-blue-400/30">
-                    <Button 
-                      onClick={() => router.push("/missions")} 
+                    <Button
+                      onClick={() => router.push("/missions")}
                       className="w-full dedsec-button"
                     >
                       <Eye className="w-4 h-4 mr-2" />

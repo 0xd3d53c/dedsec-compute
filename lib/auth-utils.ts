@@ -1,6 +1,8 @@
 import { createClient } from "./supabase/client"
 import { getSessionManager } from "./session-manager"
-import * as speakeasy from 'speakeasy'
+
+// Use CommonJS require for speakeasy to avoid bundling issues
+const speakeasy = require('speakeasy')
 import * as QRCode from 'qrcode'
 
 export interface User2FA {

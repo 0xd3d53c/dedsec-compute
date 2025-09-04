@@ -99,7 +99,7 @@ export default function HistoricalMetrics({ userId, isAdmin = false }: Historica
   }
 
   const renderPerformanceChart = () => (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
       <AreaChart data={performanceMetrics}>
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
         <XAxis 
@@ -142,7 +142,7 @@ export default function HistoricalMetrics({ userId, isAdmin = false }: Historica
   )
 
   const renderCpuMemoryChart = () => (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
       <LineChart data={performanceMetrics}>
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
         <XAxis 
@@ -181,7 +181,7 @@ export default function HistoricalMetrics({ userId, isAdmin = false }: Historica
   )
 
   const renderExecutionTimeChart = () => (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
       <BarChart data={performanceMetrics}>
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
         <XAxis 
@@ -210,7 +210,7 @@ export default function HistoricalMetrics({ userId, isAdmin = false }: Historica
     const topContributors = leaderboard.slice(0, 5)
     
     return (
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
         <BarChart data={topContributors} layout="horizontal">
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
           <XAxis type="number" stroke="#9ca3af" fontSize={12} />
@@ -293,7 +293,7 @@ export default function HistoricalMetrics({ userId, isAdmin = false }: Historica
   return (
     <Card className="border border-cyan-400 bg-slate-950/80">
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <CardTitle className="text-cyan-400 flex items-center gap-2">
               <TrendingUp className="w-5 h-5" />
@@ -305,7 +305,7 @@ export default function HistoricalMetrics({ userId, isAdmin = false }: Historica
           </div>
           <div className="flex items-center gap-2">
             <Select value={timeRange.toString()} onValueChange={(value) => setTimeRange(parseInt(value))}>
-              <SelectTrigger className="w-32 bg-slate-900 border-cyan-400">
+              <SelectTrigger className="w-28 sm:w-32 bg-slate-900 border-cyan-400 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -327,21 +327,21 @@ export default function HistoricalMetrics({ userId, isAdmin = false }: Historica
       </CardHeader>
       <CardContent>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="bg-slate-900 border border-cyan-400 grid grid-cols-4 w-full">
-            <TabsTrigger value="performance" className="text-cyan-300">Performance</TabsTrigger>
-            <TabsTrigger value="resources" className="text-cyan-300">Resources</TabsTrigger>
-            <TabsTrigger value="execution" className="text-cyan-300">Execution</TabsTrigger>
-            <TabsTrigger value="leaderboard" className="text-cyan-300">Leaderboard</TabsTrigger>
+          <TabsList className="bg-slate-900 border border-cyan-400 grid grid-cols-2 sm:grid-cols-4 w-full">
+            <TabsTrigger value="performance" className="text-cyan-300 text-xs sm:text-sm">Performance</TabsTrigger>
+            <TabsTrigger value="resources" className="text-cyan-300 text-xs sm:text-sm">Resources</TabsTrigger>
+            <TabsTrigger value="execution" className="text-cyan-300 text-xs sm:text-sm">Execution</TabsTrigger>
+            <TabsTrigger value="leaderboard" className="text-cyan-300 text-xs sm:text-sm">Leaderboard</TabsTrigger>
           </TabsList>
 
           <TabsContent value="performance" className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <div>
-                <h3 className="text-lg font-semibold text-cyan-400 mb-2">Task Completion Trends</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-cyan-400 mb-2">Task Completion Trends</h3>
                 {renderPerformanceChart()}
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-cyan-400 mb-2">Success Rate Distribution</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-cyan-400 mb-2">Success Rate Distribution</h3>
                 {renderSuccessRatePie()}
               </div>
             </div>
@@ -349,23 +349,23 @@ export default function HistoricalMetrics({ userId, isAdmin = false }: Historica
 
           <TabsContent value="resources" className="space-y-4">
             <div>
-              <h3 className="text-lg font-semibold text-cyan-400 mb-2">CPU & Memory Usage</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-cyan-400 mb-2">CPU & Memory Usage</h3>
               {renderCpuMemoryChart()}
             </div>
           </TabsContent>
 
           <TabsContent value="execution" className="space-y-4">
             <div>
-              <h3 className="text-lg font-semibold text-cyan-400 mb-2">Average Execution Time</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-cyan-400 mb-2">Average Execution Time</h3>
               {renderExecutionTimeChart()}
             </div>
           </TabsContent>
 
           <TabsContent value="leaderboard" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-cyan-400">Top Contributors</h3>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <h3 className="text-base sm:text-lg font-semibold text-cyan-400">Top Contributors</h3>
               <Select value={leaderboardPeriod} onValueChange={(value: LeaderboardPeriod) => setLeaderboardPeriod(value)}>
-                <SelectTrigger className="w-32 bg-slate-900 border-cyan-400">
+                <SelectTrigger className="w-full sm:w-32 bg-slate-900 border-cyan-400">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -378,10 +378,10 @@ export default function HistoricalMetrics({ userId, isAdmin = false }: Historica
             </div>
             {renderLeaderboardChart()}
             <div className="mt-4">
-              <h4 className="text-md font-semibold text-cyan-400 mb-2">Leaderboard Details</h4>
+              <h4 className="text-sm sm:text-md font-semibold text-cyan-400 mb-2">Leaderboard Details</h4>
               <div className="space-y-2">
                 {leaderboard.map((entry) => (
-                  <div key={entry.user_id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-cyan-400/30">
+                  <div key={entry.user_id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-slate-900/50 rounded-lg border border-cyan-400/30 gap-3">
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${leaderboardCache.getRankBadgeColor(entry.rank)}`}>
                         {entry.rank}
@@ -395,7 +395,7 @@ export default function HistoricalMetrics({ userId, isAdmin = false }: Historica
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <div className="text-cyan-400 font-bold">{leaderboardCache.formatContributionScore(entry.contribution_score)}</div>
                       <div className="text-cyan-300 text-sm">{entry.success_rate.toFixed(1)}% success</div>
                     </div>

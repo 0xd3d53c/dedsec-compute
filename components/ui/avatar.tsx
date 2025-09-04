@@ -36,7 +36,7 @@ function AvatarImage({
   ...props
 }: AvatarImageProps) {
   const [hasError, setHasError] = React.useState(false)
-  const [isLoading, setIsLoading] = React.useState(true)
+  const [isLoading, setIsLoading] = React.useState(false) // Start as false instead of true
 
   const handleError = React.useCallback((event: React.SyntheticEvent<HTMLImageElement, Event>) => {
     setHasError(true)
@@ -49,14 +49,28 @@ function AvatarImage({
     onLoad?.(event)
   }, [onLoad])
 
-  // Reset states when src changes
+  // Only show loading state if we have a valid src and showLoadingState is true
+  const shouldShowLoading = showLoadingState && isLoading && !hasError && props.src && props.src.trim() !== ""
+
+  // Reset states when src changes, but only if src is valid
   React.useEffect(() => {
-    setHasError(false)
-    setIsLoading(true)
+    if (props.src && props.src.trim() !== "") {
+      setHasError(false)
+      setIsLoading(true)
+    } else {
+      // If no src, don't show loading state
+      setHasError(false)
+      setIsLoading(false)
+    }
   }, [props.src])
 
+  // Don't render anything if no src or if src is empty
+  if (!props.src || props.src.trim() === "") {
+    return null
+  }
+
   // Show loading state if enabled and image is loading
-  if (showLoadingState && isLoading && !hasError) {
+  if (shouldShowLoading) {
     return (
       <div className={cn("aspect-square size-full flex items-center justify-center bg-muted", className)}>
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
