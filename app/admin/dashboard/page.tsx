@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Shield, LogOut, Users, Cpu, Activity, Settings, AlertTriangle, Loader2 } from "lucide-react"
+import { Shield, LogOut, Users, Cpu, Activity, Settings, AlertTriangle, Loader2, Target, TrendingUp, Database } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useAdminAuth } from "@/hooks/useAdminAuth"
 
@@ -283,6 +283,159 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           )}
+        </div>
+
+        {/* Admin Navigation Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {/* User Management */}
+          <Card className="border-cyan-400 bg-slate-950/80 hover:bg-slate-900/90 transition-colors cursor-pointer">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-blue-600 text-white">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-cyan-400">User Management</h3>
+                  <p className="text-sm text-cyan-300">Manage network users</p>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Total Users:</span>
+                  <span className="text-cyan-400 font-medium">{networkStats.totalUsers}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Active Users:</span>
+                  <span className="text-cyan-400 font-medium">{networkStats.activeNodes}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Mission Management */}
+          <Card className="border-cyan-400 bg-slate-950/80 hover:bg-slate-900/90 transition-colors cursor-pointer">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-green-600 text-white">
+                  <Target className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-cyan-400">Mission Management</h3>
+                  <p className="text-sm text-cyan-300">Create and manage missions</p>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Active Missions:</span>
+                  <span className="text-cyan-400 font-medium">-</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Total Participants:</span>
+                  <span className="text-cyan-400 font-medium">-</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Analytics */}
+          <Card className="border-cyan-400 bg-slate-950/80 hover:bg-slate-900/90 transition-colors cursor-pointer">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-purple-600 text-white">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-cyan-400">Analytics</h3>
+                  <p className="text-sm text-cyan-300">Performance monitoring</p>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Network Efficiency:</span>
+                  <span className="text-cyan-400 font-medium">{networkStats.operationsPerSecond.toFixed(1)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Response Time:</span>
+                  <span className="text-cyan-400 font-medium">-</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* System Configuration */}
+          <Card className="border-cyan-400 bg-slate-950/80 hover:bg-slate-900/90 transition-colors cursor-pointer">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-orange-600 text-white">
+                  <Settings className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-cyan-400">System Config</h3>
+                  <p className="text-sm text-cyan-300">System settings & health</p>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Status:</span>
+                  <span className="text-green-400 font-medium">Online</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Uptime:</span>
+                  <span className="text-cyan-400 font-medium">99.9%</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Security */}
+          <Card className="border-cyan-400 bg-slate-950/80 hover:bg-slate-900/90 transition-colors cursor-pointer">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-600 text-white">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-cyan-400">Security</h3>
+                  <p className="text-sm text-cyan-300">Audit logs & security</p>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Security Level:</span>
+                  <span className="text-cyan-400 font-medium">High</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Threats:</span>
+                  <span className="text-green-400 font-medium">None</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Database */}
+          <Card className="border-cyan-400 bg-slate-950/80 hover:bg-slate-900/90 transition-colors cursor-pointer">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-indigo-600 text-white">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-cyan-400">Database</h3>
+                  <p className="text-sm text-cyan-300">Storage & performance</p>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Storage:</span>
+                  <span className="text-cyan-400 font-medium">-</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-cyan-300">Connections:</span>
+                  <span className="text-cyan-400 font-medium">-</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Admin Logs */}
