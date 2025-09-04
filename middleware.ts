@@ -13,9 +13,7 @@ export async function middleware(request: NextRequest) {
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
   response.headers.set('Cross-Origin-Opener-Policy', 'same-origin')
-  response.headers.set('Cross-Origin-Embedder-Policy', 'require-corp')
-  response.headers.set('Cross-Origin-Resource-Policy', 'same-site')
-  response.headers.set('Origin-Agent-Cluster', '?1')
+  response.headers.set('Cross-Origin-Resource-Policy', 'cross-origin')
   
   // Content Security Policy for XSS protection
   // Allow Next.js development features in dev mode
@@ -27,7 +25,7 @@ export async function middleware(request: NextRequest) {
     "worker-src 'self' blob:",
     "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: https:",
+    "img-src 'self' data: https: *.supabase.co",
     `connect-src 'self' https://*.supabase.co wss://*.supabase.co${isDev ? " ws://localhost:*" : ""}`,
     "manifest-src 'self'",
     "frame-ancestors 'none'",

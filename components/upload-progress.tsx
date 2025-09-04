@@ -146,6 +146,14 @@ export function useUploadProgress() {
     setIsVisible(false)
   }
 
+  const endUpload = (success: boolean, message?: string) => {
+    if (success) {
+      completeUpload(message)
+    } else {
+      failUpload(message)
+    }
+  }
+
   return {
     isVisible,
     progress,
@@ -155,6 +163,7 @@ export function useUploadProgress() {
     updateProgress,
     completeUpload,
     failUpload,
+    endUpload,
     hide
   }
 }
