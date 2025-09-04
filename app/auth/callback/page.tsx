@@ -27,11 +27,11 @@ export default function AuthCallbackPage() {
           // Check if user profile exists
           const { data: profile, error: profileError } = await supabase
             .from("users")
-            .select("username, display_name")
+            .select("username")
             .eq("id", data.session.user.id)
             .single()
 
-          if (profileError || !profile?.username || !profile?.display_name) {
+          if (profileError || !profile?.username) {
             // Profile incomplete, redirect to consent page
             setStatus("success")
             setMessage("Redirecting to complete your profile...")

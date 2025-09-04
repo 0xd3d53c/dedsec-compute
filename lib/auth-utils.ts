@@ -1,7 +1,7 @@
 import { createClient } from "./supabase/client"
 import { getSessionManager } from "./session-manager"
-import speakeasy from 'speakeasy'
-import QRCode from 'qrcode'
+const speakeasy = require('speakeasy')
+const QRCode = require('qrcode')
 
 export interface User2FA {
   id: string
