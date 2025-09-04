@@ -214,8 +214,6 @@ export default function Dashboard() {
       const summaryResult = await taskAnalytics.getDashboardTaskSummary(userId)
       if (summaryResult.success) {
         setTaskSummary(summaryResult.summary)
-      } else {
-        console.warn("Failed to load dashboard task summary:", summaryResult.error)
       }
 
       // Load network task stats
@@ -225,8 +223,6 @@ export default function Dashboard() {
           ...(prev || {}),
           taskStats: networkResult.stats
         }))
-      } else {
-        console.warn("Failed to load network task stats:", networkResult.error)
       }
     } catch (error) {
       console.error("Failed to load task analytics:", error)

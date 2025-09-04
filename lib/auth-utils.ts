@@ -1,5 +1,7 @@
 import { createClient } from "./supabase/client"
 import { getSessionManager } from "./session-manager"
+
+// Dynamic imports for better compatibility
 const speakeasy = require('speakeasy')
 const QRCode = require('qrcode')
 

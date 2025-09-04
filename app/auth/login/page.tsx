@@ -44,7 +44,7 @@ export default function LoginPage() {
           // Check if user needs to complete profile setup
           const { data: profile, error: profileError } = await supabase
             .from("users")
-            .select("username")
+            .select("username, is_active")
             .eq("id", data.user.id)
             .single()
 
@@ -55,7 +55,7 @@ export default function LoginPage() {
             return
           }
 
-          if (!profile?.username) {
+          if (!profile?.username || !profile?.is_active) {
             router.push("/consent")
           } else {
             router.push("/dashboard")

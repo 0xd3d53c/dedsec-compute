@@ -89,7 +89,6 @@ export default function SignUpPage() {
         password: password,
         options: {
           data: {
-            display_name: displayName.trim(),
             username: displayName.trim().toLowerCase().replace(/[^a-z0-9]/g, ''),
             invite_code: inviteCode.trim() || null,
           },
@@ -108,7 +107,7 @@ export default function SignUpPage() {
         try {
           const { data: profile, error: profileError } = await supabase
             .from("users")
-            .select("username, display_name, is_active")
+            .select("username, is_active")
             .eq("id", data.user.id)
             .single()
 
@@ -119,7 +118,7 @@ export default function SignUpPage() {
             return
           } 
           
-          if (!profile?.username || !profile?.display_name) {
+          if (!profile?.username) {
             console.log("Profile incomplete, redirecting to consent")
             router.push("/consent")
             return
