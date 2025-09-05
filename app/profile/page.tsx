@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { User, Shield, Key, Smartphone, Save, Copy, CheckCircle, AlertTriangle } from "lucide-react"
+import { User, Shield, Key, Smartphone, Save, Copy, CheckCircle, AlertTriangle, Mail } from "lucide-react"
 import { authManager } from "@/lib/auth-utils"
 import { 
   validateProfilePictureFile, 
@@ -24,8 +24,7 @@ import { uploadFileWithTUS, generateFileName } from "@/lib/tus-upload"
 interface UserProfile {
   id: string
   username: string
-  phone?: string
-  country_code?: string
+  email: string
   profile_picture_url?: string
   two_factor_enabled: boolean
   created_at: string
@@ -41,8 +40,14 @@ export default function ProfilePage() {
 
   // Profile form state
   const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
   const [profilePicture, setProfilePicture] = useState<File | null>(null)
   const [profilePictureUrl, setProfilePictureUrl] = useState("")
+  
+  // Email verification state
+  const [isEmailVerificationSent, setIsEmailVerificationSent] = useState(false)
+  const [emailVerificationCode, setEmailVerificationCode] = useState("")
+  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false)
 
   // 2FA state
   const [is2FAEnabled, setIs2FAEnabled] = useState(false)
@@ -106,6 +111,7 @@ export default function ProfilePage() {
 
       setProfile(profileData)
       setUsername(profileData.username || "")
+      setEmail(profileData.email || "")
       setIs2FAEnabled(profileData.two_factor_enabled || false)
       setBackupCodes(profileData.backup_codes || [])
       setIsLoading(false)
@@ -337,8 +343,81 @@ export default function ProfilePage() {
     )
   }
 
-  function updateProfile(event: React.MouseEvent<HTMLButtonElement>): void {
-    throw new Error("Function not implemented.")
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
+  const sendEmailVerification = async () => {
+    if (!email || !profile) return
+    
+    if (!validateEmail(email)) {
+      setMessage({ type: "error", text: "Please enter a valid email address" })
+      return
+    }
+    
+    setIsVerifyingEmail(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ email: email })
+      
+      if (error) throw error
+      
+      setIsEmailVerificationSent(true)
+      setMessage({ type: "success", text: "Verification email sent! Please check your inbox and click the verification link." })
+    } catch (error: any) {
+      console.error("Error sending email verification:", error)
+      setMessage({ type: "error", text: error.message || "Failed to send verification email" })
+    } finally {
+      setIsVerifyingEmail(false)
+    }
+  }
+
+  const updateProfile = async () => {
+    if (!profile) return
+    
+    // Validate email format
+    if (!validateEmail(email)) {
+      setMessage({ type: "error", text: "Please enter a valid email address" })
+      return
+    }
+    
+    setIsSaving(true)
+    try {
+      // Only update email if it has changed and is verified
+      if (email !== profile.email) {
+        if (!isEmailVerificationSent) {
+          setMessage({ type: "error", text: "Please verify your new email address first" })
+          setIsSaving(false)
+          return
+        }
+        
+        // Update email in auth
+        const { error: authError } = await supabase.auth.updateUser({ email: email })
+        if (authError) throw authError
+      }
+      
+      // Update profile in database (username is not editable, so we don't update it)
+      const { error } = await supabase
+        .from("users")
+        .update({
+          email: email,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", profile.id)
+      
+      if (error) throw error
+      
+      setMessage({ type: "success", text: "Profile updated successfully!" })
+      
+      // Reload profile to get updated data
+      await loadProfile(profile.id)
+      
+    } catch (error: any) {
+      console.error("Error updating profile:", error)
+      setMessage({ type: "error", text: error.message || "Failed to update profile" })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -439,27 +518,53 @@ export default function ProfilePage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="username" className="text-cyan-400">
+                    <Label htmlFor="username" className="text-cyan-400 flex items-center gap-2">
+                      <User className="w-4 h-4" />
                       Username
                     </Label>
                     <Input
                       id="username"
                       value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="bg-slate-950 border-cyan-400 text-cyan-400"
-                      placeholder="Your username"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="phone" className="text-cyan-400">
-                      Phone Number
-                    </Label>
-                    <Input
-                      id="phone"
-                      value={`${profile?.country_code || ""}${profile?.phone || ""}`}
                       disabled
                       className="bg-slate-800 border-slate-600 text-slate-400"
+                      placeholder="Your username"
                     />
+                    <p className="text-xs text-slate-500 mt-1">Username cannot be changed</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="email" className="text-cyan-400 flex items-center gap-2">
+                      <Mail className="w-4 h-4" />
+                      Email Address
+                    </Label>
+                    <div className="flex gap-2">
+                    <Input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => {
+                          setEmail(e.target.value)
+                          setIsEmailVerificationSent(false)
+                        }}
+                        className="bg-slate-950 border-cyan-400 text-cyan-400"
+                        placeholder="your.email@example.com"
+                      />
+                      {email !== profile?.email && (
+                        <Button
+                          type="button"
+                          onClick={sendEmailVerification}
+                          disabled={isVerifyingEmail || !email}
+                          className="bg-cyan-600 hover:bg-cyan-500 text-white whitespace-nowrap"
+                        >
+                          {isVerifyingEmail ? "Sending..." : "Verify"}
+                        </Button>
+                      )}
+                    </div>
+                    {isEmailVerificationSent && (
+                      <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" />
+                        Verification email sent! Check your inbox.
+                      </p>
+                    )}
                   </div>
                 </div>
 

@@ -47,7 +47,7 @@ export function useAdminAuth() {
       // Verify admin privileges
       const { data: adminData, error: adminError } = await supabase
         .from('users')
-        .select('id, username, email, is_admin')
+        .select('id, username, email, is_admin, admin_level')
         .eq('id', user.id)
         .eq('is_admin', true)
         .single()
@@ -62,8 +62,8 @@ export function useAdminAuth() {
         username: adminData.username,
         email: adminData.email || user.email || '',
         is_admin: adminData.is_admin,
-        admin_level: 'admin', // Default to admin level
-        permissions: getDefaultPermissions('admin'),
+        admin_level: adminData.admin_level || 'admin',
+        permissions: getDefaultPermissions(adminData.admin_level || 'admin'),
         last_login: new Date().toISOString(),
         ip_address: '127.0.0.1', // Will be updated with real IP
         session_id: crypto.randomUUID()
