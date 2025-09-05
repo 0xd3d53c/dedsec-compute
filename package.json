@@ -73,6 +73,7 @@
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/speakeasy": "^2.0.10",
     "eslint-config-next": "15.5.2",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",

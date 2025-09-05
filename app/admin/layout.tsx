@@ -119,8 +119,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
       {/* Sidebar */}
       <div className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-cyan-400/20 
-        transform transition-transform duration-300 ease-in-out lg:translate-x-0
+        fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-slate-900 to-slate-800 border-r border-cyan-400/20 
+        transform transition-transform duration-300 ease-in-out lg:translate-x-0 shadow-2xl
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex flex-col h-full">
@@ -175,10 +175,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               return (
                 <Link key={item.name} href={item.href}>
                   <div className={`
-                    flex items-center gap-3 p-3 rounded-lg transition-colors cursor-pointer
+                    flex items-center gap-3 p-3 rounded-lg transition-all duration-200 cursor-pointer group
                     ${isActive 
-                      ? 'bg-cyan-600 text-white' 
-                      : 'text-cyan-400 hover:bg-cyan-400/10'
+                      ? 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-lg shadow-cyan-500/25' 
+                      : 'text-cyan-400 hover:bg-cyan-400/10 hover:text-cyan-300 hover:shadow-md'
                     }
                   `}>
                     <Icon className="w-5 h-5" />
@@ -220,7 +220,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       {/* Main Content */}
       <div className="lg:ml-64">
         {/* Top Bar */}
-        <div className="bg-slate-900/50 border-b border-cyan-400/20 p-4">
+        <div className="bg-gradient-to-r from-slate-900/80 to-slate-800/80 border-b border-cyan-400/20 p-4 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <Button
               variant="ghost"
@@ -246,8 +246,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </div>
 
         {/* Page Content */}
-        <main className="p-4">
-          {children}
+        <main className="p-4 min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+          <div className="max-w-7xl mx-auto">
+            {children}
+          </div>
         </main>
       </div>
     </div>

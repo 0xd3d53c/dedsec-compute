@@ -1,8 +1,8 @@
 import { createClient } from "./supabase/client"
 import { getSessionManager } from "./session-manager"
 
-// Use CommonJS require for speakeasy to avoid bundling issues
-const speakeasy = require('speakeasy')
+// Use ES6 import for speakeasy v2.0.0
+import * as speakeasy from 'speakeasy'
 import * as QRCode from 'qrcode'
 
 export interface User2FA {
@@ -310,16 +310,33 @@ export class AuthManager {
         return { success: false, error: "Invalid 2FA secret format. Please set up 2FA again." }
       }
 
-      // Verify the token using speakeasy v1.0.0 API
+      // Verify the token using speakeasy v2.0.0 API
       let verified = false
       try {
-        verified = speakeasy.totp.verify({
-          secret: userData.two_factor_secret,
-          encoding: 'base32',
-          token: cleanToken,
-          window: 2, // Allow 2 time steps before/after current time
-          time: Math.floor(Date.now() / 1000) // Explicitly set current time
-        })
+        // Ensure proper secret formatting for v2.0.0
+        const secret = userData.two_factor_secret.trim().toUpperCase()
+        
+        // Try different approaches for v2.0.0 compatibility
+        try {
+          // First try with explicit encoding
+          verified = speakeasy.totp.verify({
+            secret: secret,
+            encoding: 'base32',
+            token: cleanToken,
+            window: 2,
+            time: Math.floor(Date.now() / 1000)
+          })
+        } catch (innerError) {
+          console.log('First verification attempt failed, trying alternative approach:', innerError)
+          
+          // Alternative approach: try without explicit time
+          verified = speakeasy.totp.verify({
+            secret: secret,
+            encoding: 'base32',
+            token: cleanToken,
+            window: 2
+          })
+        }
       } catch (verifyError) {
         console.error('Speakeasy verification error:', verifyError)
         return { success: false, error: "2FA verification failed. Please try again or contact support." }

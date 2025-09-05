@@ -94,7 +94,7 @@ export default function AdminSecurityPage() {
     if (adminSession && hasPermission("view_logs")) {
       fetchSecurityData()
     }
-  }, [adminSession, authLoading, router, hasPermission, timeRange])
+  }, [adminSession, authLoading, router, hasPermission])
 
   const fetchSecurityData = async () => {
     if (!adminSession) return
@@ -126,11 +126,15 @@ export default function AdminSecurityPage() {
           .order("created_at", { ascending: false })
           .limit(100)
 
-        if (!eventsError) {
+        if (eventsError) {
+          console.log("Security events table not available or error:", eventsError.message)
+          setSecurityEvents([])
+        } else {
           setSecurityEvents(events || [])
         }
       } catch (error) {
         console.log("Security events table not available")
+        setSecurityEvents([])
       }
 
       // Fetch compromise events (if table exists)
@@ -144,11 +148,15 @@ export default function AdminSecurityPage() {
           .order("created_at", { ascending: false })
           .limit(100)
 
-        if (!compromisesError) {
+        if (compromisesError) {
+          console.log("Compromise events table not available or error:", compromisesError.message)
+          setCompromiseEvents([])
+        } else {
           setCompromiseEvents(compromises || [])
         }
       } catch (error) {
         console.log("Compromise events table not available")
+        setCompromiseEvents([])
       }
 
     } catch (error) {

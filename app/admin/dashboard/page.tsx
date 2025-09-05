@@ -68,7 +68,7 @@ export default function AdminDashboard() {
       if (hasPermission("view_users")) {
         const { data: userData } = await supabase
           .from("users")
-          .select("id, username, display_name, created_at, is_active, is_admin")
+          .select("id, username, created_at, is_active, is_admin")
           .order("created_at", { ascending: false })
           .limit(10)
 
@@ -87,16 +87,13 @@ export default function AdminDashboard() {
       }
 
       // Fetch recent admin logs
-      const fetchRecentLogs = async () => {
-        try {
-          // Note: admin_logs requires service_role access
-          // In production, this should be handled server-side via API routes
-          setRecentLogs([])
-        } catch (error) {
-          console.error('Failed to fetch recent logs:', error)
-          setRecentLogs([])
-        }
-      }
+      // Note: admin_logs requires service_role access
+      // In production, this should be handled server-side via API routes
+      // This is a placeholder; actual fetching should be implemented server-side.
+          // Remove or implement this function as needed.
+          // Example: const { data: logs } = await supabase.from("admin_logs").select("*").order("created_at", { ascending: false }).limit(10)
+          // setAdminLogs(logs || [])
+          return
 
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
@@ -149,7 +146,7 @@ export default function AdminDashboard() {
 
         {/* Network Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="border-cyan-400 bg-slate-950/80">
+          <Card className="border-cyan-400/30 bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm hover:border-cyan-400/50 transition-all duration-300 shadow-lg hover:shadow-cyan-500/10">
             <CardContent className="p-6">
               <div className="flex items-center gap-3">
                 <Users className="w-8 h-8 text-cyan-400" />
@@ -161,7 +158,7 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="border-cyan-400 bg-slate-950/80">
+          <Card className="border-cyan-400/30 bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm hover:border-cyan-400/50 transition-all duration-300 shadow-lg hover:shadow-cyan-500/10">
             <CardContent className="p-6">
               <div className="flex items-center gap-3">
                 <Cpu className="w-8 h-8 text-cyan-400" />
@@ -173,7 +170,7 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="border-cyan-400 bg-slate-950/80">
+          <Card className="border-cyan-400/30 bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm hover:border-cyan-400/50 transition-all duration-300 shadow-lg hover:shadow-cyan-500/10">
             <CardContent className="p-6">
               <div className="flex items-center gap-3">
                 <Activity className="w-8 h-8 text-cyan-400" />
@@ -222,7 +219,7 @@ export default function AdminDashboard() {
                     {users.map((user) => (
                       <div key={user.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded">
                         <div>
-                          <p className="text-cyan-400 font-medium">{user.display_name || user.username}</p>
+                          <p className="text-cyan-400 font-medium">{user.username}</p>
                           <p className="text-cyan-300 text-sm">@{user.username}</p>
                         </div>
                         <div className="text-right">
